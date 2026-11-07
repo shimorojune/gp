@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 2
+const SCHEMA_VERSION = 3
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   teammate TEXT,
   teammate_best_ms INTEGER,
   teammate_pos INTEGER,
+  teammate_points INTEGER,
   flashbacks INTEGER NOT NULL,
   warnings INTEGER NOT NULL,
   corner_cuts INTEGER NOT NULL,
@@ -102,6 +103,18 @@ CREATE TABLE IF NOT EXISTS incidents (
   session_time REAL
 );
 CREATE INDEX IF NOT EXISTS incidents_session ON incidents(session_id);
+CREATE TABLE IF NOT EXISTS classification (
+  session_id INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  team TEXT,
+  is_player INTEGER NOT NULL,
+  grid INTEGER,
+  points INTEGER,
+  best_lap_ms INTEGER,
+  status TEXT,
+  PRIMARY KEY (session_id, position)
+) WITHOUT ROWID;
 CREATE TABLE IF NOT EXISTS profile (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   text TEXT NOT NULL,
@@ -199,7 +212,9 @@ export class HistoryDb {
     const v = (this.db.prepare('PRAGMA user_version').get() as { user_version: number })
       .user_version
     if (v < SCHEMA_VERSION) {
+      // New tables come from SCHEMA (IF NOT EXISTS); new columns on old tables need ALTERs.
       this.db.exec(SCHEMA)
+      if (v >= 1 && v < 3) this.db.exec('ALTER TABLE sessions ADD COLUMN teammate_points INTEGER')
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
     }
   }
@@ -283,8 +298,8 @@ export class HistoryDb {
             valid_laps, best_lap_ms, best_s1_ms, best_s2_ms, best_s3_ms, ideal_lap_ms, median_lap_ms,
             consistency_ms, finish_pos, grid_pos, points, pit_stops, result_status, race_time_s,
             penalties_s, field_best_ms, num_cars, teammate, teammate_best_ms, teammate_pos,
-            flashbacks, warnings, corner_cuts)
-           VALUES (${Array(47).fill('?').join(', ')})`,
+            teammate_points, flashbacks, warnings, corner_cuts)
+           VALUES (${Array(48).fill('?').join(', ')})`,
         )
         .run(
           s.uid,
@@ -331,6 +346,7 @@ export class HistoryDb {
           s.teammate?.name ?? null,
           s.teammate?.bestLapMs || null,
           s.teammate?.position ?? null,
+          s.teammate?.points ?? null,
           s.flashbacks,
           s.warnings,
           s.cornerCutWarnings,
@@ -360,6 +376,22 @@ export class HistoryDb {
         'INSERT INTO incidents (session_id, lap, kind, detail, session_time) VALUES (?, ?, ?, ?, ?)',
       )
       for (const i of s.incidents) inc.run(id, i.lap, i.kind, i.detail, i.sessionTime)
+      const cls = this.db.prepare(
+        `INSERT OR REPLACE INTO classification (session_id, position, name, team, is_player, grid,
+          points, best_lap_ms, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      for (const c of s.classification ?? [])
+        cls.run(
+          id,
+          c.position,
+          c.name,
+          c.team,
+          c.isPlayer ? 1 : 0,
+          c.grid,
+          c.points,
+          c.bestLapMs || null,
+          c.status,
+        )
       if (s.bestTrace) {
         const ms = s.laps.find((l) => l.lap === s.bestTrace?.lap)?.lapMs ?? 0
         this.db

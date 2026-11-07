@@ -5,7 +5,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
-import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
+import { EngineerSession, NotesStore, attachHistory, attachRadio } from '@gp/engineer'
 import { HistoryDb, backfill, ingestRecording } from '@gp/history'
 import { formatLapTime } from '@gp/shared'
 import {
@@ -42,7 +42,7 @@ const USAGE = `gp <command> [options]
           Summarise a recording: duration, packet counts, sessions, player laps.
   live    [--port 20777]
           Print a compact live view of the race state.
-  chat    [--replay file.gprec [--speed 1] [--until 600]] [--port 20777]
+  chat    [--replay file.gprec [--speed 1] [--until 600]] [--port 20777] [--db gp.db]
           [--model sonnet] [--check-model haiku] [--no-radio]
           Talk to the engineer in the terminal, against live telemetry or a recording.
           --until replays up to that many seconds as fast as possible, then freezes there.
@@ -275,9 +275,11 @@ async function chat(): Promise<void> {
     ? new RaceState({ now: () => recClock + (frozen ? 0 : Date.now() - recWall) })
     : new RaceState()
 
+  const history = historyDb()
   const engineer = new EngineerSession({
     snapshot: () => state.snapshot(),
     notes,
+    history,
     cwd: engineerCwd,
     ...(values.model ? { model: values.model } : {}),
     ...(values['check-model'] ? { checkModel: values['check-model'] } : {}),
@@ -312,7 +314,9 @@ async function chat(): Promise<void> {
 
   let stopRadio: (() => void) | null = null
   if (!values['no-radio']) {
+    const hooks = attachHistory(state, history, (t) => engineer.addContext(t))
     stopRadio = attachRadio(state, engineer, {
+      lapNote: hooks.lapNote,
       onCall: (r) =>
         say(`\x1b[36mGP (radio)>\x1b[0m ${r.text}  \x1b[2m(${r.model}, ${r.totalMs}ms)\x1b[0m`),
     })

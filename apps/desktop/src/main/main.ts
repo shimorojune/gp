@@ -72,7 +72,12 @@ engineer.on('error', (e) => {
   toChat({ type: 'error', message: e.message })
 })
 engineer.on('turn', (t) => console.log(`[engineer] ${t.phase} #${t.id} ${t.kind} ${t.detail}`))
-const historyHooks = attachHistory(state, history, (t) => engineer.addContext(t))
+const historyHooks = attachHistory(state, history, (t) => engineer.addContext(t), {
+  onNewWeekend: () => {
+    console.log('[engineer] new race weekend: fresh conversation')
+    void engineer.restart().catch((e) => console.error('[engineer] restart failed', e))
+  },
+})
 attachRadio(state, engineer, {
   lapNote: historyHooks.lapNote,
   onCall: (r, { urgent }) => {

@@ -145,6 +145,11 @@ export interface SessionSnapshot {
   numSafetyCarPeriods: number
   numVscPeriods: number
   forecast: { inMinutes: number; weather: string; rainPercent: number; trackTempC: number }[]
+  gameMode: number
+  /** Same for every session of one race weekend (practice, quali, race). */
+  weekendLink: number
+  /** Same for every session of one career save/season. */
+  seasonLink: number
 }
 
 export interface RaceSnapshot {
@@ -408,6 +413,9 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
       numSafetyCarPeriods: s.numSafetyCarPeriods,
       numVscPeriods: s.numVirtualSafetyCarPeriods,
       forecast,
+      gameMode: s.gameMode,
+      weekendLink: s.weekendLinkIdentifier,
+      seasonLink: s.seasonLinkIdentifier,
     }
   }
 

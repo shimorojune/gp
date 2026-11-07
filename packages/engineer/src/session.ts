@@ -282,6 +282,27 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
     }
   }
 
+  /**
+   * Start a fresh conversation (new race weekend): waits for queued turns, then restarts the
+   * Claude process with a rebuilt system prompt (latest profile and notes). Pending
+   * [context] lines carry over to the new conversation.
+   */
+  restart(): Promise<void> {
+    const run = async () => {
+      if (!this.q) return
+      this.input.close()
+      this.q.close()
+      await this.loop
+      this.q = null
+      this.loop = null
+      this.input = new AsyncQueue<SDKUserMessage>()
+      this.start()
+    }
+    const done = this.chain.then(run, run)
+    this.chain = done.catch(() => {})
+    return done
+  }
+
   /** Stop the current reply (e.g. driver pressed push-to-talk again). */
   async interrupt(): Promise<void> {
     await this.q?.interrupt()

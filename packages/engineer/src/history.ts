@@ -3,6 +3,8 @@ import {
   type HistoryDb,
   type LapTrace,
   type Program,
+  careerBrief,
+  careerView,
   cornerReport,
   lapVsHistory,
   pbTrace,
@@ -12,7 +14,7 @@ import {
   trackBrief,
   trackRecall,
 } from '@gp/history'
-import { type RaceSnapshot, type RaceState, TRACKS } from '@gp/telemetry'
+import { CAREER_GAME_MODES, type RaceSnapshot, type RaceState, TRACKS } from '@gp/telemetry'
 import { z } from 'zod'
 
 const json = (value: unknown) => ({
@@ -121,6 +123,13 @@ export function historyTools(
       readOnly,
     ),
     tool(
+      'get_career',
+      "His career-mode season so far (career sessions only, never sim): team, teammate, every round's qualifying and race result next to the teammate's, points, wins, podiums, head-to-head, and championship standings from the races recorded.",
+      {},
+      async () => json(careerView(history) ?? { note: 'no career sessions recorded yet' }),
+      readOnly,
+    ),
+    tool(
       'get_driver_profile',
       "Your running notes on the driver's strengths, weaknesses, habits and progress, built from his sessions.",
       {},
@@ -144,18 +153,34 @@ export function attachHistory(
   state: RaceState,
   history: HistoryDb,
   addContext: (text: string) => void,
+  opts: {
+    /** A new race weekend started (not the first one of this app run). */
+    onNewWeekend?: () => void
+  } = {},
 ): HistoryHooks {
   let briefedUid: string | null = null
+  let weekend: number | null = null
   let sessionBest = 0
   const timer = setInterval(() => {
     const s = state.snapshot().session
     if (!s || s.uid === briefedUid) return
     briefedUid = s.uid
     sessionBest = 0
+    // A fresh conversation per weekend keeps the context small; the history carries the rest.
+    if (weekend !== null && s.weekendLink !== weekend) opts.onNewWeekend?.()
+    weekend = s.weekendLink
     try {
+      const career = CAREER_GAME_MODES.has(s.gameMode)
       const brief = trackBrief(history, s.trackId)
+      const season = career ? careerBrief(history, s.seasonLink) : null
       addContext(
-        `New session: ${s.track} ${s.sessionType}. ${brief ?? `First time at ${s.track} as far as the history goes.`}`,
+        [
+          `New session: ${s.track} ${s.sessionType} (${career ? 'career' : 'sim time'}).`,
+          brief ?? `First time at ${s.track} as far as the history goes.`,
+          season,
+        ]
+          .filter(Boolean)
+          .join(' '),
       )
     } catch (e) {
       console.error('[history] brief failed', e)

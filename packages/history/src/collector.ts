@@ -75,6 +75,17 @@ export interface SessionResult {
   penaltiesSec: number
 }
 
+export interface ClassifiedCar {
+  position: number
+  name: string
+  team: string
+  isPlayer: boolean
+  grid: number
+  points: number
+  bestLapMs: number
+  status: string
+}
+
 export interface SessionRecord {
   uid: string
   startedAt: string
@@ -108,7 +119,9 @@ export interface SessionRecord {
   cornerCutWarnings: number
   /** Fastest lap by any other driver in the session (not time trial). */
   fieldBestMs: number | null
-  teammate: { name: string; bestLapMs: number; position: number } | null
+  teammate: { name: string; bestLapMs: number; position: number; points: number | null } | null
+  /** Final classification of the whole field (race and qualifying), when the game sent it. */
+  classification: ClassifiedCar[]
   numCars: number
 }
 
@@ -171,6 +184,8 @@ class SessionAccum {
   private session: Extract<Packet, { id: PacketId.Session }>['data'] | null = null
   private teamId: number | null = null
   private history: SessionHistoryData | null = null
+  private participants: { name: string; teamId: number }[] = []
+  private classification: ClassifiedCar[] = []
   private cornerCuts = 0
   private warnings = 0
 
@@ -197,6 +212,7 @@ class SessionAccum {
         break
       case PacketId.Participants:
         this.teamId = p.data.participants[this.playerIdx]?.teamId ?? null
+        this.participants = p.data.participants.map((x) => ({ name: x.name, teamId: x.teamId }))
         break
       case PacketId.CarSetups: {
         const s = p.data.cars[this.playerIdx]
@@ -259,6 +275,20 @@ class SessionAccum {
         this.onEvent(p.data, p.header.sessionTime)
         break
       case PacketId.FinalClassification: {
+        this.classification = p.data.cars
+          .slice(0, p.data.numCars)
+          .map((fc, i) => ({
+            position: fc.position,
+            name: this.participants[i]?.name ?? `Car ${i}`,
+            team: TEAMS[this.participants[i]?.teamId ?? 255] ?? 'unknown',
+            isPlayer: i === this.playerIdx,
+            grid: fc.gridPosition,
+            points: fc.points,
+            bestLapMs: fc.bestLapTimeInMS,
+            status: RESULT_STATUS[fc.resultStatus] ?? `#${fc.resultStatus}`,
+          }))
+          .filter((c) => c.position > 0)
+          .sort((a, b) => a.position - b.position)
         const c = p.data.cars[this.playerIdx]
         if (c && c.position > 0)
           this.result = {
@@ -393,6 +423,9 @@ class SessionAccum {
       this.teamId === null || isTT
         ? undefined
         : others.find((c) => c.teamId === this.teamId && c.teamId !== 255)
+    const mateCls = mate
+      ? this.classification.find((c) => c.name === mate.name && !c.isPlayer)
+      : undefined
     return {
       uid: this.uid,
       startedAt: new Date(recordingStartMs + this.firstAt).toISOString(),
@@ -433,8 +466,14 @@ class SessionAccum {
       cornerCutWarnings: this.cornerCuts,
       fieldBestMs: fieldBest.length ? Math.min(...fieldBest) : null,
       teammate: mate
-        ? { name: mate.name, bestLapMs: mate.bestLapMs, position: mate.position }
+        ? {
+            name: mate.name,
+            bestLapMs: mate.bestLapMs,
+            position: mateCls?.position ?? mate.position,
+            points: mateCls?.points ?? null,
+          }
         : null,
+      classification: this.classification,
       numCars: snap.cars.length,
     }
   }
