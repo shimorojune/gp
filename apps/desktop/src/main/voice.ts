@@ -1,6 +1,7 @@
 import type { EngineerSession, Reply } from '@gp/engineer'
 import type { RaceState } from '@gp/telemetry'
 import {
+  CornerGate,
   DeepgramStt,
   DualSensePtt,
   ElevenLabsTts,
@@ -30,9 +31,18 @@ export interface VoiceDeps {
 
 /** Shorter than this is a bump of the button, not speech. */
 const MIN_UTTERANCE_MS = 350
+/** How long a sentence waits for a straight. Radio calls older than this are dropped. */
+const STRAIGHT_WAIT_MS = 10_000
+
+interface SpeakOptions {
+  /** Emergencies talk through corners. */
+  urgent?: boolean
+  /** Drop it rather than say it late if no straight comes in time (automatic calls). */
+  dropIfLate?: boolean
+}
 
 /**
- * Push-to-talk radio: DualSense mute button -> mic -> STT -> engineer -> TTS -> speakers.
+ * Push-to-talk radio: DualSense button (L3 by default) -> mic -> STT -> engineer -> TTS -> speakers.
  * Everything that talks back (answers and automatic radio calls) goes through speak(), and
  * pressing the button cuts off whatever GP is saying.
  */
@@ -52,6 +62,10 @@ export class RadioVoice {
   /** Replies up to this id were cut off by the driver; ignore their remaining text. */
   private mutedThrough = 0
   private lastAskId = 0
+  private readonly gate = new CornerGate()
+  /** True on a straight, or whenever he isn't driving. */
+  private clearToTalk = true
+  private gateTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(private readonly d: VoiceDeps) {
     this.fallbackStt = new WhisperStt()
@@ -77,6 +91,11 @@ export class RadioVoice {
     this.ptt.on('down', () => this.pressed())
     this.ptt.on('up', () => void this.released())
     this.ptt.start()
+    this.gateTimer = setInterval(() => {
+      const live = this.d.state.snapshot().status === 'live'
+      const straight = this.gate.update(this.d.state.playerInputs())
+      this.clearToTalk = !live || process.env.GP_TALK_IN_CORNERS === '1' || straight
+    }, 50)
 
     // Stream typed and spoken answers into speech as they're written.
     this.d.engineer.on('delta', ({ id, kind, text }) => {
@@ -101,12 +120,20 @@ export class RadioVoice {
   }
 
   /** Speak a complete radio call (automatic checks). */
-  radioCall(text: string): void {
+  radioCall(text: string, urgent = false): void {
     // Don't talk over the driver while he's holding the button.
     if (this.stream) return
+    // Newest news wins: cut whatever he was still saying.
+    this.stopSpeaking()
     this.newUtterance()
-    this.speak(text)
+    this.speak(text, { urgent, dropIfLate: !urgent })
     this.endUtterance()
+  }
+
+  /** The race order changed: anything still being said is about the old situation. */
+  positionChanged(): void {
+    if (this.stream) return
+    this.stopSpeaking()
   }
 
   /** Keyboard fallback when the controller isn't connected: press to talk, press again to send. */
@@ -213,14 +240,32 @@ export class RadioVoice {
   /** Last sentence sent to TTS in this utterance, for intonation continuity. */
   private prevSentence: string | undefined
 
-  private speak(text: string): void {
+  /** Resolves true once he's on a straight, false if the wait ran out or speech was cut. */
+  private async waitForStraight(signal: AbortSignal): Promise<boolean> {
+    const until = performance.now() + STRAIGHT_WAIT_MS
+    while (!this.clearToTalk) {
+      if (signal.aborted || performance.now() > until) return false
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    return !signal.aborted
+  }
+
+  private speak(text: string, opts: SpeakOptions = {}): void {
     const utt = this.utt
     const signal = this.speakAbort.signal
+    // Hold each sentence until a straight (mid-reply too: he pauses through the corner).
+    const gate = async (): Promise<boolean> => {
+      if (opts.urgent) return !signal.aborted
+      const ok = await this.waitForStraight(signal)
+      if (!ok && !signal.aborted && !opts.dropIfLate) return true
+      return ok
+    }
     const clean = text.replace(/[*_#`]/g, '')
     const plain = plainSpeech(clean)
     if (!plain) return
     if (!this.tts) {
-      this.speakChain = this.speakChain.then(() => {
+      this.speakChain = this.speakChain.then(async () => {
+        if (!(await gate())) return
         if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
       })
       return
@@ -236,6 +281,7 @@ export class RadioVoice {
       return null
     })
     this.speakChain = this.speakChain.then(async () => {
+      if (!(await gate())) return
       const a = await audio
       if (!a) {
         if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
@@ -264,6 +310,7 @@ export class RadioVoice {
   }
 
   stop(): void {
+    if (this.gateTimer) clearInterval(this.gateTimer)
     this.ptt.stop()
     this.mic.stop()
   }

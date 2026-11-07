@@ -46,7 +46,7 @@ const USAGE = `gp <command> [options]
           --until replays up to that many seconds as fast as possible, then freezes there.
           Needs a Claude Code login on this machine (claude /login).
   ptt-test [--raw]
-          Hold the DualSense mic-mute button, talk, release: prints what was heard and how
+          Hold the push-to-talk button (L3 by default, GP_PTT_BUTTON=l3|r3|mute), talk, release: prints what was heard and how
           long transcription took. --raw prints which HID report bytes change instead.
 `
 
@@ -473,7 +473,7 @@ async function pttTest(): Promise<void> {
     console.log(`  fixed: "${fixDriverNames(raw, grid)}"`)
   })
   ptt.start()
-  console.log(`stt: ${stt.name}. Hold mic-mute on the DualSense and talk. Ctrl+C to stop.`)
+  console.log(`stt: ${stt.name}. Hold ${ptt.button} on the DualSense and talk. Ctrl+C to stop.`)
   await new Promise<void>((done) => process.once('SIGINT', () => done()))
   ptt.stop()
   mic.stop()

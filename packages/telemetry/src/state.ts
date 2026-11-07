@@ -351,6 +351,12 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
     }
   }
 
+  /** Cheap read of the driver's inputs, for timing radio calls around corners. */
+  playerInputs(): { throttle: number; brake: number; steer: number; speedKph: number } | null {
+    const t = this.telemetry?.[this.playerIdx]
+    return t ? { throttle: t.throttle, brake: t.brake, steer: t.steer, speedKph: t.speed } : null
+  }
+
   get playerCarIndex(): number {
     return this.playerIdx
   }

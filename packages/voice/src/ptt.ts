@@ -5,6 +5,20 @@ const SONY = 0x054c
 const DUALSENSE = [0x0ce6, 0x0df2] // DualSense, DualSense Edge
 const MUTE_BIT = 0x04
 
+/** Buttons that can be push-to-talk: byte in the USB report (Bluetooth is one later) and bit. */
+export const PTT_BUTTONS = {
+  mute: { byte: 10, bit: 0x04 },
+  l3: { byte: 9, bit: 0x40 },
+  r3: { byte: 9, bit: 0x80 },
+} as const
+export type PttButton = keyof typeof PTT_BUTTONS
+
+/** GP_PTT_BUTTON=l3|r3|mute; Rohit switched to pressing the left stick (2026-11-07). */
+export function pttButtonFromEnv(): PttButton {
+  const b = process.env.GP_PTT_BUTTON?.toLowerCase()
+  return b && b in PTT_BUTTONS ? (b as PttButton) : 'l3'
+}
+
 type PttEvents = {
   down: undefined
   up: undefined
@@ -35,6 +49,17 @@ export class DualSensePtt extends TypedEmitter<PttEvents> {
     return i < 0 ? null : ((data[i] ?? 0) & MUTE_BIT) !== 0
   }
 
+  static isButtonDown(data: Buffer | number[], button: PttButton): boolean | null {
+    const i = DualSensePtt.muteByte(data)
+    if (i < 0) return null
+    const { byte, bit } = PTT_BUTTONS[button]
+    return ((data[byte + (i - 10)] ?? 0) & bit) !== 0
+  }
+
+  constructor(readonly button: PttButton = pttButtonFromEnv()) {
+    super()
+  }
+
   start(): void {
     this.tryOpen()
     // Reconnect if the controller is plugged in later or drops out.
@@ -61,7 +86,7 @@ export class DualSensePtt extends TypedEmitter<PttEvents> {
           announced = true
           this.emit('connected', { transport: data[0] === 0x31 ? 'bluetooth' : 'usb' })
         }
-        const down = DualSensePtt.isMuteDown(data)
+        const down = DualSensePtt.isButtonDown(data, this.button)
         if (down === null || down === this.pressed) return
         this.pressed = down
         this.emit(down ? 'down' : 'up', undefined)

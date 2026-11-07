@@ -14,8 +14,10 @@ class FakeState extends TypedEmitter<Record<string, unknown>> {
       status: 'live',
       session: { track: 'Brazil', sessionType: 'Race' },
       cars: [
-        { carIdx: 0, name: 'ROHIT', isPlayer: true, position: this.position },
-        { carIdx: 3, name: 'NORRIS', isPlayer: false, position: 8 },
+        { carIdx: 0, name: 'ROHIT', isPlayer: true, position: this.position, pitStatus: 0 },
+        { carIdx: 3, name: 'NORRIS', isPlayer: false, position: this.position === 7 ? 8 : 7 },
+        { carIdx: 4, name: 'SAINZ', isPlayer: false, position: this.position === 9 ? 8 : 9 },
+        { carIdx: 5, name: 'ALONSO', isPlayer: false, position: 6 },
       ],
     }
   }
@@ -33,23 +35,37 @@ function setup() {
       return { text: 'copy' } as Reply
     },
   } as unknown as EngineerSession
-  const stop = attachRadio(state as unknown as RaceState, engineer, { minGapMs: 30, settleMs: 5 })
-  return { state, sent, stop }
+  const changes: string[] = []
+  const stop = attachRadio(state as unknown as RaceState, engineer, {
+    minGapMs: 30,
+    settleMs: 20,
+    pollMs: 5,
+    onPositionChange: (a, b) => changes.push(`${a}>${b}`),
+  })
+  return { state, sent, stop, changes }
 }
 
-const ovtk = (passer: number, passed: number) => ({
-  code: 'OVTK',
-  details: { code: 'OVTK', overtakingVehicleIdx: passer, beingOvertakenVehicleIdx: passed },
-})
-
 describe('attachRadio', () => {
-  it('dedupes repeated overtakes', async () => {
+  it('reports a position change once it has held, with who is around us now', async () => {
+    const { state, sent, stop, changes } = setup()
+    await tick(20)
+    state.position = 9
+    await tick(80)
+    expect(changes).toEqual(['7>9'])
+    expect(sent).toHaveLength(1)
+    expect(sent[0]).toMatch(/^Position change: P7 to P9 \(lost 2, passed by NORRIS, SAINZ\)/)
+    expect(sent[0]).toContain('Car ahead now SAINZ')
+    stop()
+  })
+
+  it('ignores a position that flips straight back', async () => {
     const { state, sent, stop } = setup()
-    state.fire('event', ovtk(0, 3))
-    state.fire('event', ovtk(0, 3))
-    state.position = 6
-    await tick(60)
-    expect(sent).toEqual(['Overtake: we passed NORRIS.'])
+    await tick(20)
+    state.position = 8
+    await tick(8)
+    state.position = 7
+    await tick(80)
+    expect(sent).toEqual([])
     stop()
   })
 

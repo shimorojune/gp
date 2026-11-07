@@ -115,3 +115,40 @@ describe('plainSpeech', () => {
     expect(plainSpeech('<break time="0.4s" />')).toBe('')
   })
 })
+
+describe('DualSensePtt.isButtonDown', () => {
+  it('reads L3 over USB and Bluetooth', async () => {
+    const { DualSensePtt } = await import('../src/ptt.ts')
+    const usb = new Array(64).fill(0)
+    usb[0] = 0x01
+    usb[9] = 0x40
+    const bt = new Array(78).fill(0)
+    bt[0] = 0x31
+    bt[10] = 0x40
+    expect(DualSensePtt.isButtonDown(usb, 'l3')).toBe(true)
+    expect(DualSensePtt.isButtonDown(bt, 'l3')).toBe(true)
+    expect(DualSensePtt.isButtonDown(usb, 'mute')).toBe(false)
+    usb[9] = 0x80
+    expect(DualSensePtt.isButtonDown(usb, 'l3')).toBe(false)
+    expect(DualSensePtt.isButtonDown(usb, 'r3')).toBe(true)
+  })
+})
+
+describe('CornerGate', () => {
+  it('opens only after a moment flat out with the wheel straight', async () => {
+    const { CornerGate } = await import('../src/corner.ts')
+    let t = 0
+    const g = new CornerGate({ holdMs: 300, now: () => t })
+    const flat = { throttle: 1, brake: 0, steer: 0.02, speedKph: 280 }
+    expect(g.update(flat)).toBe(false)
+    t = 200
+    expect(g.update(flat)).toBe(false)
+    t = 350
+    expect(g.update(flat)).toBe(true)
+    t = 400
+    expect(g.update({ ...flat, brake: 0.6 })).toBe(false)
+    t = 500
+    expect(g.update({ ...flat, steer: 0.4 })).toBe(false)
+    expect(g.update(null)).toBe(false)
+  })
+})

@@ -47,15 +47,31 @@ engineer.on('delta', ({ id, kind, text }) => {
 })
 engineer.on('error', (e) => toChat({ type: 'error', message: e.message }))
 attachRadio(state, engineer, {
-  onCall: (r) => {
+  onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
-    voice.radioCall(r.text)
+    voice.radioCall(r.text, urgent)
     console.log(`[radio] ${r.text}`)
+  },
+  onPositionChange: (from, to) => {
+    console.log(`[radio] position P${from} -> P${to}`)
+    voice.positionChanged()
   },
 })
 
 listener.on('packet', (p) => state.ingest(p))
-listener.on('raw', ({ buf, at }) => writer?.write(buf, at))
+// Record every session automatically (one file per session) unless GP_AUTO_RECORD=0 or the
+// driver switched recording off in the dashboard.
+let autoRecord = process.env.GP_AUTO_RECORD !== '0'
+listener.on('raw', ({ buf, at }) => {
+  if (!writer && autoRecord) startRecording()
+  writer?.write(buf, at)
+})
+state.on('sessionStarted', () => {
+  if (!writer || !autoRecord) return
+  void writer.close()
+  writer = null
+  startRecording()
+})
 listener.on('error', (err) => console.error('[udp]', err))
 state.on('lapCompleted', (l) => {
   if (l.isPlayer) console.log(`[lap] ${l.lapNumber} ${l.lapTimeMs}ms valid=${l.valid}`)
@@ -65,14 +81,21 @@ function recordingState(): RecordingState {
   return { recording: writer !== null, path: writerPath, packets: writer?.count ?? 0 }
 }
 
+function startRecording(): void {
+  mkdirSync(RECORDINGS_DIR, { recursive: true })
+  writerPath = join(RECORDINGS_DIR, `${new Date().toISOString().replace(/[:.]/g, '-')}.gprec`)
+  writer = new RecordingWriter(writerPath)
+  console.log(`[rec] recording to ${writerPath}`)
+}
+
 async function toggleRecording(): Promise<RecordingState> {
   if (writer) {
+    autoRecord = false
     await writer.close()
     writer = null
   } else {
-    mkdirSync(RECORDINGS_DIR, { recursive: true })
-    writerPath = join(RECORDINGS_DIR, `${new Date().toISOString().replace(/[:.]/g, '-')}.gprec`)
-    writer = new RecordingWriter(writerPath)
+    autoRecord = true
+    startRecording()
   }
   return recordingState()
 }

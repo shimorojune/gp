@@ -3,14 +3,31 @@ import { INFRINGEMENT_TYPES, PENALTY_TYPES, type RaceState } from '@gp/telemetry
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 
+export interface CallInfo {
+  /** Safety car, a penalty to serve: say it now, even mid-corner, and cut anything else. */
+  urgent: boolean
+}
+
 export interface RadioOptions {
   /** Called with each radio call the engineer decides to make (not silent ones). */
-  onCall?: (reply: Reply) => void
+  onCall?: (reply: Reply, info: CallInfo) => void
   /** Minimum gap between automatic checks, in ms of wall time. Events in between are batched. */
   minGapMs?: number
-  /** Wait this long after an overtake before reporting, so LapData positions have caught up. */
+  /** A position change has to hold this long before it counts (swaps back and forth, lap 1). */
   settleMs?: number
+  /** How often to look at the player's position. */
+  pollMs?: number
+  /**
+   * Called the moment the player's position changes (before the check comes back), so the
+   * voice can cut off anything it was saying about the old order.
+   */
+  onPositionChange?: (from: number, to: number) => void
   now?: () => number
+}
+
+interface Queued {
+  text: string
+  kind: 'position' | 'urgent' | 'other'
 }
 
 /**
@@ -21,9 +38,12 @@ export interface RadioOptions {
  */
 export function attachRadio(state: RaceState, engineer: EngineerSession, opts: RadioOptions = {}) {
   const minGapMs = opts.minGapMs ?? 8000
-  const settleMs = opts.settleMs ?? 1500
+  const settleMs = opts.settleMs ?? 2000
+  const pollMs = opts.pollMs ?? 500
   const now = opts.now ?? Date.now
-  let queued: string[] = []
+  let queued: Queued[] = []
+  /** Bumped on every position change; a check that started before one is stale. */
+  let positionVersion = 0
   let inFlight = false
   let lastSentAt = Number.NEGATIVE_INFINITY
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -31,7 +51,8 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const schedule = () => {
     if (closed || inFlight || timer || !queued.length) return
-    const wait = Math.max(0, lastSentAt + minGapMs - now())
+    const urgent = queued.some((q) => q.kind !== 'other')
+    const wait = urgent ? 0 : Math.max(0, lastSentAt + minGapMs - now())
     timer = setTimeout(flush, wait)
   }
   const flush = () => {
@@ -43,11 +64,16 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     queued = []
     inFlight = true
     lastSentAt = now()
-    const text = `${dropped ? `(${dropped} earlier events skipped) ` : ''}${batch.join(' ')}`
+    const version = positionVersion
+    const urgent = batch.some((q) => q.kind === 'urgent')
+    const text = `${dropped ? `(${dropped} earlier events skipped) ` : ''}${batch.map((q) => q.text).join(' ')}`
     engineer
       .notify(text)
       .then((r) => {
-        if (!isSilent(r.text)) opts.onCall?.(r)
+        // The order changed while he was thinking: this call is about the old race. The
+        // change is queued, so the next check covers it.
+        if (version !== positionVersion && !urgent) return
+        if (!isSilent(r.text)) opts.onCall?.(r, { urgent })
       })
       .catch(() => {})
       .finally(() => {
@@ -55,24 +81,83 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
         schedule()
       })
   }
-  const push = (text: string) => {
+  const push = (text: string, kind: Queued['kind'] = 'other') => {
     // Nothing to say on the radio in menus or while paused.
     if (state.snapshot().status !== 'live') return
-    queued.push(text)
+    // A newer position supersedes an older one that hasn't gone out yet.
+    if (kind === 'position') queued = queued.filter((q) => q.kind !== 'position')
+    queued.push({ text, kind })
+    // Don't make a position change or an emergency wait out the gap between routine checks.
+    if (kind !== 'other' && timer) {
+      clearTimeout(timer)
+      timer = null
+    }
     schedule()
   }
 
-  // The game repeats OVTK for the same pair (and cars swap back and forth); one per pair per 20s.
-  const seenOvertakes = new Map<string, number>()
+  // Position tracking. OVTK events are unreliable (repeats, swaps, pit stops and spins never
+  // send one), so diff the timing instead and only count a change once it has held.
+  let reported: number | null = null
+  let pending: { pos: number; since: number } | null = null
+  let safetyCar: string | null = null
+  const poll = setInterval(() => {
+    if (closed) return
+    const s = state.snapshot()
+    const sc = s.session?.safetyCar ?? null
+    if (s.status === 'live' && sc && sc !== safetyCar) {
+      if (safetyCar !== null)
+        push(sc === 'None' ? `${safetyCar} ending, green flag soon.` : `${sc} deployed.`, 'urgent')
+      safetyCar = sc
+    }
+    const me = s.cars.find((c) => c.isPlayer)
+    if (s.status !== 'live' || !me?.position) return
+    // In the pit lane places come and go; judge it once he's back out.
+    if (me.pitStatus) return
+    const pos = me.position
+    if (reported === null) {
+      reported = pos
+      return
+    }
+    if (pos === reported) {
+      pending = null
+      return
+    }
+    if (!pending || pending.pos !== pos) {
+      pending = { pos, since: now() }
+      return
+    }
+    if (now() - pending.since < settleMs) return
+    const from = reported
+    reported = pos
+    pending = null
+    positionVersion++
+    const name = (p: number) => s.cars.find((c) => c.position === p)?.name
+    const ahead = name(pos - 1)
+    const behind = name(pos + 1)
+    const lost = pos > from
+    const n = Math.abs(pos - from)
+    const between = (lost ? range(from, pos - 1) : range(pos + 1, from))
+      .map(name)
+      .filter(Boolean)
+      .join(', ')
+    opts.onPositionChange?.(from, pos)
+    push(
+      `Position change: P${from} to P${pos} (${lost ? 'lost' : 'gained'} ${n}${between ? `, ${lost ? 'passed by' : 'passed'} ${between}` : ''}). Car ahead now ${ahead ?? 'none, leading'}, behind ${behind ?? 'none'}. Earlier plans about the old order no longer apply.`,
+      'position',
+    )
+  }, pollMs)
 
   const offSession = state.on('sessionStarted', () => {
     // A restart or a new session: whatever was queued is about the old one.
     queued = []
-    seenOvertakes.clear()
+    reported = null
+    pending = null
+    safetyCar = null
     const s = state.snapshot().session
-    queued.push(
-      `New session started${s ? ` (${s.track} ${s.sessionType})` : ''}: a restart or a new session. Laps, positions and gaps from before no longer apply.`,
-    )
+    queued.push({
+      text: `New session started${s ? ` (${s.track} ${s.sessionType})` : ''}: a restart or a new session. Laps, positions and gaps from before no longer apply.`,
+      kind: 'other',
+    })
   })
 
   const offLap = state.on('lapCompleted', (l) => {
@@ -97,7 +182,8 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       const type = PENALTY_TYPES[d.penaltyType] ?? `penalty type ${d.penaltyType}`
       const why = INFRINGEMENT_TYPES[d.infringementType] ?? `infringement ${d.infringementType}`
       const secs = d.penaltyType === 4 || d.penaltyType === 1 ? ` (${d.time}s)` : ''
-      push(`Penalty: ${type}${secs} for ${why}.`)
+      // Stop-go and drive-through need action from him; time penalties can wait for a straight.
+      push(`Penalty: ${type}${secs} for ${why}.`, d.penaltyType <= 1 ? 'urgent' : 'other')
       return
     }
     if ((d.code === 'SGSV' || d.code === 'DTSV') && 'vehicleIdx' in d) {
@@ -106,33 +192,12 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
         push(d.code === 'SGSV' ? 'Stop-go penalty served.' : 'Drive-through penalty served.')
       return
     }
-    if (d.code !== 'OVTK' || !('overtakingVehicleIdx' in d)) return
-    const me = state.snapshot().cars.find((c) => c.isPlayer)
-    if (!me) return
-    const passer = d.overtakingVehicleIdx
-    const passed = d.beingOvertakenVehicleIdx
-    if (passer !== me.carIdx && passed !== me.carIdx) return
-    const key = `${passer}>${passed}`
-    const t = now()
-    if (t - (seenOvertakes.get(key) ?? Number.NEGATIVE_INFINITY) < 20_000) return
-    seenOvertakes.set(key, t)
-    // Positions in LapData lag the event; read them after a moment.
-    setTimeout(() => {
-      if (closed) return
-      const s = state.snapshot()
-      const name = (idx: number) => s.cars.find((c) => c.carIdx === idx)?.name ?? `car ${idx}`
-      // No position here: the event and LapData disagree for a moment; the engineer reads timing.
-      push(
-        passer === me.carIdx
-          ? `Overtake: we passed ${name(passed)}.`
-          : `Lost a place: ${name(passer)} passed us.`,
-      )
-    }, settleMs)
   })
 
   return () => {
     closed = true
     if (timer) clearTimeout(timer)
+    clearInterval(poll)
     offSession()
     offLap()
     offEvent()
@@ -142,3 +207,5 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 export function isSilent(text: string): boolean {
   return text.trim().replace(/[.\s]/g, '').toLowerCase() === SILENT.replace(/[.\s]/g, '')
 }
+
+const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i)
