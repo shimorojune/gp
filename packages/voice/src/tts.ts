@@ -9,8 +9,8 @@ export interface Tts {
   synth(text: string, signal: AbortSignal): Promise<TtsAudio>
 }
 
-/** "George": warm, calm British male; a reasonable GP until Rohit picks a voice. */
-export const DEFAULT_VOICE_ID = 'JBFqnCBsd6RMkjVDRZzb'
+/** Rohit's pick (2026-11-07). Override with GP_VOICE_ID. */
+export const DEFAULT_VOICE_ID = '4VBYDqjeok174FJpT0Jc'
 
 /**
  * ElevenLabs streaming TTS. Flash v2.5 is their low-latency model (~75ms model time); raw
