@@ -409,7 +409,8 @@ GP grows with the driver from a local SQLite database, `~/Documents/GP/gp.db` (`
 - **When:** the app reads each recording when its session ends (a 400 MB race takes ~3 s, Motion packets skipped), backfills older recordings at launch, then keeps only the newest `GP_KEEP_RECORDINGS` (default 10) raw files that were read successfully.
 - **Context budget:** the system prompt carries a driver profile (≤ 1200 chars, four lines: strengths, working on, habits, progress). Each new session adds a ~80-token track brief (PB, best sectors, last time there) to the next turn as `[context]`. Lap events note a new PB at the track. Everything else is on demand through tools: `get_track_history`, `get_recent_sessions`, `get_session_detail`, `get_driver_profile`.
 - **Learning:** after each saved session (3+ laps) Haiku writes a one- or two-sentence summary into the session row and refines the profile.
-- **Still to come:** setup coaching (setup diffs vs pace), career tracking (season, teammate, weekend briefing, fresh conversation per weekend), notes/profile tab in the app.
+- **Coaching:** `get_setup_history` lists the setups driven at a track with their best/typical pace and the changes to the current setup. `get_corner_comparison` compares this session's best lap (live) with the PB lap's trace, braking zone by braking zone: time, minimum speed, braking point, full-throttle point.
+- **Still to come:** career tracking (season, teammate, weekend briefing, fresh conversation per weekend), notes/profile tab in the app.
 
 ## 10. Phases
 

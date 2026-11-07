@@ -1,10 +1,14 @@
 import { type Options, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import {
   type HistoryDb,
+  type LapTrace,
   type Program,
+  cornerReport,
   lapVsHistory,
+  pbTrace,
   recentSessionsView,
   sessionDetailView,
+  setupHistory,
   trackBrief,
   trackRecall,
 } from '@gp/history'
@@ -23,8 +27,14 @@ function trackIdFor(name: string | undefined, s: RaceSnapshot): number | null {
   return hit ? Number(hit[0]) : null
 }
 
+export type LiveBest = () => { trackId: number | null; lapMs: number; trace: LapTrace } | null
+
 /** Tools over the long-term history. Every one returns a compact digest, never raw telemetry. */
-export function historyTools(history: HistoryDb, snapshot: () => RaceSnapshot) {
+export function historyTools(
+  history: HistoryDb,
+  snapshot: () => RaceSnapshot,
+  liveBest?: LiveBest,
+) {
   return [
     tool(
       'get_track_history',
@@ -54,6 +64,60 @@ export function historyTools(history: HistoryDb, snapshot: () => RaceSnapshot) {
       { sessionId: z.number().int() },
       async ({ sessionId }) =>
         json(sessionDetailView(history, sessionId) ?? { error: 'no such session' }),
+      readOnly,
+    ),
+    tool(
+      'get_setup_history',
+      'Setups he has driven at a track (default: current), fastest first, each with best and typical lap on it, and the list of changes from that setup to the one in the car right now. Use it for setup advice: what was quicker here, what he changed since.',
+      { track: z.string().optional() },
+      async ({ track }) => {
+        const s = snapshot()
+        const id = trackIdFor(track, s)
+        if (id === null) return json({ error: 'unknown track' })
+        const rows = setupHistory(history, id, s.player?.setup ?? null)
+        return json(
+          rows.length
+            ? rows.map(({ setup: _setup, ...r }) => r)
+            : { note: 'no setups recorded at this track yet' },
+        )
+      },
+      readOnly,
+    ),
+    tool(
+      'get_corner_comparison',
+      "Corner by corner: his best lap this session (or, between sessions, his latest session's best) against his personal-best lap at this track. For each braking zone: time lost or gained, minimum speed, braking point and where he's back on full throttle. Use it to tell him exactly where the time is.",
+      {},
+      async () => {
+        const s = snapshot()
+        const trackId = s.session?.trackId
+        if (trackId === undefined) return json({ error: 'no session' })
+        const pb = pbTrace(history, trackId)
+        if (!pb) return json({ note: 'no reference lap stored at this track yet' })
+        const live = liveBest?.()
+        if (live && live.trackId === trackId) {
+          if (live.lapMs === pb.lapMs) return json({ note: 'this lap is his PB here' })
+          return json({
+            lap: `this session's best, ${live.lapMs}ms`,
+            ...cornerReport(pb.trace, live.trace, `PB ${pb.lapMs}ms from ${pb.date}`),
+          })
+        }
+        const latest = history.db
+          .prepare(
+            `SELECT t.lap_ms, t.data FROM traces t JOIN sessions s ON s.id = t.session_id
+             WHERE s.track_id = ? ORDER BY s.started_at DESC LIMIT 1`,
+          )
+          .get(trackId) as { lap_ms: number; data: string } | undefined
+        if (!latest || latest.lap_ms === pb.lapMs)
+          return json({ note: 'no lap this session yet, and his last session here was the PB' })
+        return json({
+          lap: `latest session's best, ${latest.lap_ms}ms`,
+          ...cornerReport(
+            pb.trace,
+            JSON.parse(latest.data) as LapTrace,
+            `PB ${pb.lapMs}ms from ${pb.date}`,
+          ),
+        })
+      },
       readOnly,
     ),
     tool(

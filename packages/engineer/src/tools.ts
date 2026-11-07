@@ -2,7 +2,7 @@ import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import type { HistoryDb } from '@gp/history'
 import type { RaceSnapshot } from '@gp/telemetry'
 import { z } from 'zod'
-import { historyTools } from './history.ts'
+import { type LiveBest, historyTools } from './history.ts'
 import type { NoteCategory, NotesStore } from './notes.ts'
 import {
   carStatusView,
@@ -25,12 +25,13 @@ export interface ToolDeps {
   snapshot: () => RaceSnapshot
   notes: NotesStore
   history?: HistoryDb
+  liveBest?: LiveBest
 }
 
 const categories = ['driving', 'setup', 'radio', 'strategy', 'personal', 'track'] as const
 
 /** In-process MCP server exposing live race data and the notes memory to the engineer. */
-export function createRaceTools({ snapshot, notes, history }: ToolDeps) {
+export function createRaceTools({ snapshot, notes, history, liveBest }: ToolDeps) {
   const readOnly = { annotations: { readOnlyHint: true } }
   const tools = [
     tool(
@@ -139,7 +140,7 @@ export function createRaceTools({ snapshot, notes, history }: ToolDeps) {
       { id: z.string() },
       async ({ id }) => json({ removed: notes.remove(id) }),
     ),
-    ...(history ? historyTools(history, snapshot) : []),
+    ...(history ? historyTools(history, snapshot, liveBest) : []),
   ]
   return {
     server: createSdkMcpServer({ name: RACE_SERVER, version: '0.1.0', tools, alwaysLoad: true }),

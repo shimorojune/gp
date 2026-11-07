@@ -7,7 +7,13 @@ import {
   attachRadio,
   debriefSession,
 } from '@gp/engineer'
-import { HistoryDb, backfill, ingestRecording, pruneRecordings } from '@gp/history'
+import {
+  HistoryDb,
+  SessionCollector,
+  backfill,
+  ingestRecording,
+  pruneRecordings,
+} from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
 import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
@@ -33,6 +39,9 @@ const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
 /** Raw recordings kept on disk once they're in the history database (~400 MB per race). */
 const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 10)
 const history = new HistoryDb(join(GP_HOME, 'gp.db'))
+/** Live copy of what the history will record, for corner comparisons during the session. */
+let live = new SessionCollector(Date.now())
+const liveStart = Date.now()
 
 const listener = new TelemetryListener({ port: PORT })
 const state = new RaceState()
@@ -47,6 +56,7 @@ const engineer = new EngineerSession({
   snapshot: () => state.snapshot(),
   notes: new NotesStore(join(GP_HOME, 'notes.json')),
   history,
+  liveBest: () => live.liveBest(),
   cwd: engineerCwd,
   ...(process.env.GP_MODEL ? { model: process.env.GP_MODEL } : {}),
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
@@ -76,7 +86,14 @@ attachRadio(state, engineer, {
   },
 })
 
-listener.on('packet', (p) => state.ingest(p))
+listener.on('packet', (p) => {
+  state.ingest(p)
+  live.feed(p, Date.now() - liveStart)
+})
+// The live collector only needs the current session; drop finished ones so it doesn't grow.
+state.on('sessionStarted', () => {
+  live = new SessionCollector(Date.now())
+})
 // Record every session automatically (one file per session) unless GP_AUTO_RECORD=0 or the
 // driver switched recording off in the dashboard.
 let autoRecord = process.env.GP_AUTO_RECORD !== '0'

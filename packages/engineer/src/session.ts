@@ -8,6 +8,7 @@ import {
 import type { HistoryDb } from '@gp/history'
 import { TypedEmitter } from '@gp/shared'
 import type { RaceSnapshot } from '@gp/telemetry'
+import type { LiveBest } from './history.ts'
 import type { NotesStore } from './notes.ts'
 import { buildSystemPrompt } from './persona.ts'
 import { AsyncQueue } from './queue.ts'
@@ -19,6 +20,8 @@ export interface EngineerOptions {
   notes: NotesStore
   /** Long-term session history (gp.db). Optional so tests and the CLI can run without it. */
   history?: HistoryDb
+  /** This session's best clean lap trace, live (for get_corner_comparison). */
+  liveBest?: LiveBest
   driverName?: string
   engineerName?: string
   /** Model for things the driver asks. Default 'sonnet'. */
@@ -113,6 +116,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
       snapshot: this.opts.snapshot,
       notes: this.opts.notes,
       ...(this.opts.history ? { history: this.opts.history } : {}),
+      ...(this.opts.liveBest ? { liveBest: this.opts.liveBest } : {}),
     })
     const track = this.opts.snapshot().session?.track ?? null
     const options: Options = {

@@ -165,7 +165,7 @@ class SessionAccum {
   private curLap = 0
   private lapDistance = -1
   private trace: TraceAccum | null = null
-  private bestTrace: { ms: number; trace: LapTrace } | null = null
+  bestTrace: { ms: number; trace: LapTrace } | null = null
   private lastDamage = 0
   private result: SessionResult | null = null
   private session: Extract<Packet, { id: PacketId.Session }>['data'] | null = null
@@ -467,6 +467,17 @@ export class SessionCollector {
     const r = this.cur?.finish(this.recordingStartMs)
     if (r) this.done.push(r)
     this.cur = null
+  }
+
+  /** The current session's best clean lap so far, live (for corner-by-corner comparison). */
+  liveBest(): { trackId: number | null; lapMs: number; trace: LapTrace } | null {
+    const b = this.cur?.bestTrace
+    if (!b) return null
+    return {
+      trackId: this.cur?.state.snapshot().session?.trackId ?? null,
+      lapMs: b.ms,
+      trace: b.trace,
+    }
   }
 
   finish(): SessionRecord[] {
