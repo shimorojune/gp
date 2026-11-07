@@ -45,7 +45,11 @@ const voice = new RadioVoice({ engineer, state, toAudio, toChat, log: (l) => con
 engineer.on('delta', ({ id, kind, text }) => {
   if (kind === 'ask') toChat({ type: 'delta', id, text })
 })
-engineer.on('error', (e) => toChat({ type: 'error', message: e.message }))
+engineer.on('error', (e) => {
+  console.error(`[engineer] error: ${e.message}`)
+  toChat({ type: 'error', message: e.message })
+})
+engineer.on('turn', (t) => console.log(`[engineer] ${t.phase} #${t.id} ${t.kind} ${t.detail}`))
 attachRadio(state, engineer, {
   onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })

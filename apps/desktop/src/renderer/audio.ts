@@ -62,6 +62,7 @@ export class RadioPlayer {
         this.enqueue(m.pcm, m.sampleRate)
         break
       case 'say':
+        console.log(`[audio] mac voice: "${m.text.slice(0, 40)}"`)
         this.say(m.text, m.voice)
         break
       case 'end':
@@ -74,6 +75,9 @@ export class RadioPlayer {
         if (this.openUtt === m.utt) this.playAt += m.ms / 1000
         break
       case 'stop':
+        console.log(
+          `[audio] stop at t=${this.ctx?.currentTime.toFixed(2) ?? '-'} open=${this.openUtt}`,
+        )
         this.stop()
         break
       case 'beep':
@@ -84,8 +88,12 @@ export class RadioPlayer {
 
   private startUtterance(utt: number): void {
     if (this.openUtt === utt) return
-    this.openUtt = utt
     const ctx = this.ensure()
+    const sink = (ctx as AudioContext & { sinkId?: unknown }).sinkId
+    console.log(
+      `[audio] utterance ${utt} start: ctx ${ctx.state} t=${ctx.currentTime.toFixed(2)} playAt=${this.playAt.toFixed(2)} prev=${this.openUtt} sources=${this.sources.size} radio=${this.radio} sink=${JSON.stringify(sink ?? '')}`,
+    )
+    this.openUtt = utt
     this.playAt = Math.max(this.playAt, ctx.currentTime + 0.03)
     this.squelch(this.playAt)
     this.playAt += 0.06
@@ -103,6 +111,8 @@ export class RadioPlayer {
     src.buffer = buf
     src.connect(this.radio ? this.input! : ctx.destination)
     const at = Math.max(this.playAt, ctx.currentTime + 0.02)
+    if (at - ctx.currentTime > 15)
+      console.warn(`[audio] chunk scheduled ${(at - ctx.currentTime).toFixed(1)}s ahead`)
     src.start(at)
     this.playAt = at + buf.duration
     this.sources.add(src)

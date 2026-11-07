@@ -53,6 +53,8 @@ type EngineerEvents = {
   tool: { id: number; kind: TurnKind; name: string }
   reply: Reply
   error: Error
+  /** Turn bookkeeping, for the log: which turn the SDK is answering. */
+  turn: { id: number; kind: TurnKind; phase: 'start' | 'result'; detail: string }
 }
 
 interface Pending {
@@ -181,6 +183,12 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
           resolve,
           reject,
         })
+        this.emit('turn', {
+          id,
+          kind,
+          phase: 'start',
+          detail: `${model} pending=${this.pending.length}`,
+        })
         this.input.push({
           type: 'user',
           message: { role: 'user', content },
@@ -228,6 +236,12 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
     }
     if (msg.type === 'result') {
       this.pending.shift()
+      this.emit('turn', {
+        id: cur.id,
+        kind: cur.kind,
+        phase: 'result',
+        detail: `${msg.subtype} pending=${this.pending.length} "${cur.text.trim().slice(0, 40)}"`,
+      })
       const reply: Reply = {
         id: cur.id,
         kind: cur.kind,

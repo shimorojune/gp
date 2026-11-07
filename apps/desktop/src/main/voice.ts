@@ -109,6 +109,7 @@ export class RadioVoice {
         this.splitters.set(id, sp)
         this.newUtterance()
         this.answering = this.utt
+        this.d.log(`[voice] speaking answer #${id} as utterance ${this.utt}`)
       }
       for (const sentence of sp.push(text)) this.speak(sentence)
     })
@@ -134,6 +135,7 @@ export class RadioVoice {
     // Otherwise newest news wins: cut whatever older call was still going.
     this.stopSpeaking()
     this.newUtterance()
+    this.d.log(`[voice] speaking radio call as utterance ${this.utt}${urgent ? ' (urgent)' : ''}`)
     this.speak(text, { urgent, dropIfLate: !urgent })
     this.endUtterance()
   }
