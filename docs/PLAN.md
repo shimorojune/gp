@@ -1,13 +1,13 @@
-# GP — a personal AI race engineer for F1 2020
+# GP — a personal AI race engineer for F1 23
 
-Status: plan only, nothing built yet. Last updated 2026-11-07 (v2, with Rohit's answers folded in).
+Status: plan only, nothing built yet. Last updated 2026-11-07 (v3: target game switched from F1 2020 to F1 23).
 
 **Target setup:** Apple M4, 32 GB RAM. PS5 DualSense controller. Claude Max 5x. All game
 modes, races at 50%+. Strictly personal use. pnpm monorepo.
 
 ## 1. What we're building
 
-A macOS desktop app that sits next to F1 2020 (running under CrossOver) and acts as
+A macOS desktop app that sits next to F1 23 (running under CrossOver) and acts as
 a race engineer in the spirit of Gianpiero Lambiase: calm, terse on the radio, blunt,
 dry humour, and genuinely useful.
 
@@ -27,7 +27,7 @@ conversation, reasoning, strategy and setup thinking.
 ## 2. Architecture
 
 ```
- F1 2020 (Wine/CrossOver)
+ F1 23 (Wine/CrossOver)  
         │ UDP 127.0.0.1:20777, ~20–60 Hz
         ▼
 ┌───────────────────────── Electron main process (Node, TypeScript) ─────────────────────────┐
@@ -88,7 +88,7 @@ gp/
 │   └── desktop/            Electron app: main process wiring, renderer UI (React)
 ├── packages/
 │   ├── shared/             shared types (RaceState, events), zod schemas, logger
-│   ├── telemetry/          F1 2020 UDP parser, RaceState store, recorder, derived metrics
+│   ├── telemetry/          F1 23 UDP parser,   RaceState store, recorder, derived metrics
 │   ├── strategy/           pure functions: deg model, fuel, pit window, undercut, weather
 │   ├── callouts/           rule engine, priority queue, safe-to-talk gate, line templates
 │   ├── engineer/           Agent SDK session, persona prompt, MCP tools, memory
@@ -103,18 +103,36 @@ gp/
 `telemetry`, `strategy` and `callouts` have no Electron dependency, so they're unit-tested
 with Vitest against recorded sessions and can be reused if you ever move to a newer F1 game.
 
-## 4. Telemetry: getting data out of F1 2020
+## 4. Telemetry: getting data out of F1 23
+
+### Why F1 23 and not F1 2020
+
+- **Much richer telemetry.** F1 23's UDP spec has 14 packet types versus 10, including
+  the game's own pit window, full lap/sector/stint history for every car, your available
+  tyre sets with expected lap deltas, a dedicated damage packet and extended motion data.
+  That removes a lot of the estimating we'd have to do for 2020.
+- **Runs under CrossOver.** CodeWeavers rates F1 23 "Runs Well" on macOS (last tested on
+  CrossOver 25.0.1). Some third-party reports talk about black screens and instability on
+  Apple Silicon, so "it runs" is something you confirm on your M4 first, not something we
+  assume.
+- **Anti-cheat.** At launch Codemasters said anti-cheat was "on the post-launch roadmap".
+  I couldn't find confirmation it was ever added, and you say it isn't there, which fits
+  with it running under CrossOver. F1 23 is no longer the current game, so a late anti-cheat
+  patch is unlikely. If one ever lands it would break the game under Wine, not just this
+  app.
 
 ### Game settings
 
-In F1 2020: *Game Options → Settings → Telemetry Settings*
+In F1 23: *Settings → Telemetry Settings*
 
 - UDP Telemetry: **On**
 - UDP Broadcast Mode: **Off**
 - UDP IP Address: **127.0.0.1**
 - UDP Port: **20777**
 - UDP Send Rate: **20 Hz** to start (10–60 available; 20 is plenty for an engineer)
-- UDP Format: **2020**
+- UDP Format: **2023**
+- Your Telemetry: **Public** (only matters online; "Restricted" hides some of your car
+  data from others, and some fields come through zeroed for other cars either way)
 
 ### Does UDP from CrossOver reach a Mac process?
 
@@ -129,54 +147,69 @@ receive. If it doesn't arrive:
 
 Spike test: `nc -ul 20777 | xxd | head` while driving, or a 10-line Node `dgram` script.
 
-### Packet format (2020)
+### Packet format (2023)
 
-Little-endian, packed structs, 22 cars per array. Every packet starts with a 24-byte header:
+Little-endian, packed structs, 22 cars per array. Every packet starts with a 29-byte header:
 
 | Field | Type |
 |---|---|
-| packetFormat (2020) | uint16 |
+| packetFormat (2023) | uint16 |
+| gameYear (23) | uint8 |
 | gameMajorVersion, gameMinorVersion, packetVersion | uint8 ×3 |
 | packetId | uint8 |
 | sessionUID | uint64 |
 | sessionTime | float |
 | frameIdentifier | uint32 |
+| overallFrameIdentifier | uint32 |
 | playerCarIndex, secondaryPlayerCarIndex | uint8 ×2 |
 
-Packet types we care about:
+Packet types:
 
 | ID | Packet | Rate | What we use it for |
 |---|---|---|---|
-| 0 | Motion | send rate | g-forces, yaw, wheel slip/suspension (player only extras) for handling diagnosis and "safe to talk" gate |
-| 1 | Session | 2/s | track, session type, laps, weather now, track/air temp, safety car status, **weather forecast samples** |
-| 2 | Lap Data | send rate | lap/sector times, position, pit status, lap validity, penalties, distance |
-| 3 | Event | on event | session start/end, fastest lap, retirement, DRS, penalty, speed trap, chequered flag |
-| 4 | Participants | every 5s | driver names, teams |
-| 5 | Car Setups | 2/s | full setup of player car (wings, diff, camber/toe, suspension, ARB, ride height, brakes, tyre pressures, fuel) |
-| 6 | Car Telemetry | send rate | speed, throttle, brake, steer, gear, RPM, DRS, brake/tyre temps, tyre pressures |
-| 7 | Car Status | send rate | fuel in tank, **fuel remaining laps**, tyre compound, **tyre age**, **tyre wear %**, damage, ERS store/mode |
-| 8 | Final Classification | end | results |
-| 9 | Lobby Info | lobby | multiplayer only, ignore |
+| 0 | Motion | send rate | position, g-forces, yaw for all cars; "safe to talk" gate |
+| 1 | Session | 2/s | track, session type, laps, weather, temps, safety car status, **weather forecast with rain %**, **pit window ideal/latest lap**, pit rejoin position, assists |
+| 2 | Lap Data | send rate | lap/sector times (ms), gaps, position, pit status, lap validity, penalties, warnings |
+| 3 | Event | on event | session start/end, fastest lap, retirement, DRS, penalty, speed trap, safety car, overtakes, chequered flag |
+| 4 | Participants | every 5s | driver names, teams, telemetry visibility |
+| 5 | Car Setups | 2/s | full setup of your car (wings, diff, camber/toe, suspension, ARB, ride height, brakes, tyre pressures, fuel) |
+| 6 | Car Telemetry | send rate | speed, throttle, brake, steer, gear, RPM, DRS, brake/tyre surface/inner temps, tyre pressures |
+| 7 | Car Status | send rate | fuel in tank, fuel remaining laps, tyre compound, tyre age, ERS store/mode, flags |
+| 8 | Final Classification | end | results, stints |
+| 9 | Lobby Info | lobby | multiplayer lobby, mostly ignore |
+| 10 | Car Damage | 10/s | **tyre wear % (float)**, tyre damage, brake wear, wing/floor/sidepod/gearbox/engine damage |
+| 11 | Session History | cycles cars | **every lap and sector time + tyre stints for every car** |
+| 12 | Tyre Sets | cycles cars | **your available tyre sets**, wear, remaining life, **expected lap delta per set** |
+| 13 | Motion Ex | send rate | your car only: wheel slip ratio/angle, suspension, local velocity, angular velocity/acceleration |
 
-Things the 2020 format **does not** give us, so we compute them:
+What this saves us compared to 2020:
 
-- **Pit window.** The explicit ideal/latest pit lap fields only arrived in F1 2021. We
-  compute our own from tyre wear rate, fuel, pit loss per track, and gaps.
-- **Gaps to cars ahead/behind.** Derived from lap distance and timestamps per car.
-- **Tyre degradation rate.** Derived from lap times vs. tyre age, fuel-corrected.
+- **Pit window** comes from the game. We still run our own model on top (undercut threat,
+  safety car stops, tyre set choice) but start from the game's numbers.
+- **Rival history** (their lap times and stints) comes from Session History, so "is Leclerc
+  on old mediums?" is a lookup, not a guess.
+- **Tyre choice** for the next stint can use the game's own per-set lap deltas.
+- **Handling diagnosis** (Phase 6) gets real slip angles and ratios from Motion Ex instead
+  of inferring them.
+
+Still computed by us: fuel-corrected pace, tyre degradation slope, gaps over time,
+safe-to-talk windows.
 
 Caveats:
 
-- In online sessions other cars' setups come through zeroed. Fine, we only need ours.
-- Exact struct layouts must be checked against Codemasters' published 2020 spec before we
-  trust offsets. Phase 1 includes a validation step against recorded packets.
+- Other cars' setups and some status fields come through zeroed online when their
+  telemetry is restricted. Fine, we mostly need ours.
+- Exact struct layouts must be checked against EA/Codemasters' published F1 23 UDP spec
+  (and patch notes, since `packetVersion` can change) before we trust offsets. Phase 1
+  includes a validation step against recorded packets. `@racehub-io/f1-telemetry-client`
+  already supports the 2023 format and is worth evaluating against our own parser.
 
 ## 5. Push-to-talk on the PS5 controller
 
 You drive with a DualSense, so push-to-talk is a controller button, with a keyboard key
 as backup.
 
-**Which button.** L3/R3 work, but F1 2020 may already bind them (check *Controls*), and
+**Which button.** L3/R3 work, but F1 23 may already bind them (check *Controls*), and
 clicking a stick mid-corner is a bad idea. Better candidates, in order:
 
 1. **Mic mute button** (the small one under the PS button). The game almost certainly
@@ -371,11 +404,13 @@ Each phase ends with something you can use. Rough effort assumes evenings/weeken
 
 ### Phase 0 — Spikes (1–2 evenings) — **de-risk before writing the app**
 
+- [ ] F1 23 runs stably under CrossOver on your M4 for a full race (you've likely done
+      this already).
 - [ ] UDP from CrossOver reaches a Node `dgram` listener on the Mac (§4).
 - [ ] Agent SDK `query()` works from Node on your Mac using your logged-in subscription;
       measure warm time-to-first-token with a fast model.
 - [ ] Swift GameController helper sees the DualSense mute/touchpad button down/up while
-      F1 2020 has focus (i.e. CrossOver doesn't grab the controller exclusively). Keyboard
+      F1 23 has focus (i.e. CrossOver doesn't grab the controller exclusively). Keyboard
       fallback via `uiohook-napi` checked too.
 - [ ] whisper.cpp `large-v3-turbo` transcribes a 3s clip in acceptable time **while the
       game is running**, with no frame drops in-game.
@@ -387,7 +422,7 @@ we'd stop and rethink before going further.
 
 ### Phase 1 — Telemetry core (1 week)
 
-- Typed parsers for packets 1, 2, 3, 4, 5, 6, 7 (Motion later).
+- Typed parsers for packets 1–7 and 10–12 (Motion, Motion Ex and Lobby later).
 - Recorder: dump raw packets with timestamps to a file per session.
 - Replay CLI: feed a recording back at real or accelerated speed. Every later phase is
   developed against replays, not by driving laps.
@@ -417,9 +452,10 @@ we'd stop and rethink before going further.
 
 - Lap history and stints in SQLite, fuel-corrected pace, tyre deg slope per compound.
 - Pit loss table per track (seed values, refined from your own stops).
-- Own pit window model: when tyres or fuel run out, best lap to stop, undercut/overcut
-  threat from the car ahead/behind, safety car "cheap stop" logic.
-- Weather: interpret forecast samples, crossover-to-inters reasoning.
+- Pit window: start from the game's ideal/latest lap, then layer our own logic: undercut/
+  overcut threat from cars ahead/behind (using their stint history), safety car "cheap
+  stop", which tyre set to fit (from the Tyre Sets packet deltas).
+- Weather: interpret forecast samples with rain %, crossover-to-inters reasoning.
 - Tools exposing all of this so Claude reasons over our numbers, not his own guesses.
 - **Ship:** "what's the plan?" gets a real strategy answer.
 
@@ -448,11 +484,11 @@ we'd stop and rethink before going further.
   telemetry, proposes one or two changes, you test, he compares.
 - **Ship:** practice sessions with a useful setup conversation.
 
-Honest note: Claude's built-in knowledge of F1 2020's specific setup model is generic
+Honest note: Claude's built-in knowledge of F1 23's specific setup model is generic
 motorsport knowledge plus forum lore. Good advice here comes from our telemetry analysis
-and A/B comparisons, not from the model "knowing" the game. In-race changes are limited
-in F1 2020 anyway (brake bias, diff, front wing at a stop), so this is mostly a
-practice/quali feature.
+(Motion Ex slip data helps a lot) and A/B comparisons, not from the model "knowing" the
+game. In-race changes are limited (brake bias, diff, ERS, front wing at a stop), so this
+is mostly a practice/quali feature.
 
 ### Phase 7 — Memory and personality polish (ongoing)
 
@@ -463,7 +499,7 @@ practice/quali feature.
 
 ### Later / maybe
 
-- Other games (F1 23/24 have richer telemetry; the parser layer would be per-format).
+- Other games (F1 24/25). The parser layer is per-format, so it's mostly a new decoder.
 - Second screen dashboard.
 
 ## 11. Risks and unknowns
@@ -481,12 +517,15 @@ practice/quali feature.
 | Memory notes drift or contradict each other | Medium | Medium | End-of-session curation pass, editable Notes tab |
 | Chatty mode is annoying or burns usage | Medium | Low | Verbosity setting, token counter in overlay |
 | Electron packaging with SDK subprocess | Medium | Low | Run unpackaged; personal use only, no need for a signed app |
-| 2020 packet offsets wrong | Low | Medium | Validate against spec and recorded data in Phase 1 |
+| F1 23 packet offsets wrong | Low | Medium | Validate against spec and recorded data in Phase 1 |
+| F1 23 unstable under CrossOver on M4 | Low–medium | Fatal | You confirm it runs a full race before anything else |
+| An F1 23 update adds anti-cheat | Low | Fatal (game stops running under Wine) | Nothing to do in the app; parser layer is per-format so another game could slot in |
 
 ## 12. Decisions (answered 2026-11-07)
 
 | Question | Answer | What it changes |
 |---|---|---|
+| Game | F1 23 (switched from F1 2020) | 2023 UDP format, richer data, §4 |
 | Mac | Apple M4, 32 GB | Local whisper `large-v3-turbo` is the default STT |
 | Input | PS5 DualSense, any spare button | PTT via Swift GameController helper (§5) |
 | Paid voice | Yes | ElevenLabs streaming TTS |
@@ -499,7 +538,7 @@ practice/quali feature.
 
 ## 13. Still open
 
-1. Which DualSense button you actually prefer once we see what F1 2020 has bound
+1. Which DualSense button you actually prefer once we see what F1 23 has bound
    (we'll check in Phase 0).
 2. A name for him. "GP" is the obvious one; your call.
 3. Voice: pick one from the ElevenLabs library together in Phase 3.
