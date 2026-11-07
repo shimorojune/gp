@@ -31,6 +31,8 @@ export interface VoiceDeps {
 
 /** Shorter than this is a bump of the button, not speech. */
 const MIN_UTTERANCE_MS = 350
+/** Keep recording this long after the button is released. */
+const POST_ROLL_MS = 350
 /** How long a sentence waits for a straight. Radio calls older than this are dropped. */
 const STRAIGHT_WAIT_MS = 10_000
 
@@ -66,6 +68,7 @@ export class RadioVoice {
   /** True on a straight, or whenever he isn't driving. */
   private clearToTalk = true
   private gateTimer: ReturnType<typeof setInterval> | null = null
+  private stopped = false
   /** Utterance number of an answer to the driver that is still queued or playing. */
   private answering: number | null = null
 
@@ -81,10 +84,25 @@ export class RadioVoice {
     this.d.log(
       `[voice] stt=${this.stt.name}${this.stt === this.fallbackStt && !this.fallbackStt.available ? ' (model missing!)' : ''} tts=${this.tts?.name ?? 'mac voice'}`,
     )
-    this.mic.on('error', (e) => this.status(`mic error: ${e.message}`))
+    // The controller (and its mic) can be off when the app starts or drop out mid-session:
+    // keep trying, and say so once rather than every few seconds.
+    let micErrorShown = false
+    this.mic.on('error', (e) => {
+      if (micErrorShown) return
+      micErrorShown = true
+      this.status(`mic error: ${e.message}`)
+    })
+    this.mic.on('exit', () => {
+      if (this.stopped) return
+      setTimeout(() => {
+        if (!this.stopped && !this.mic.running) this.mic.start()
+      }, 3000)
+    })
     this.mic.start()
     this.ptt.on('connected', ({ transport }) => {
       this.status(`controller connected over ${transport}`)
+      if (!this.mic.running) this.mic.start()
+      micErrorShown = false
       if (transport === 'bluetooth')
         this.status('the controller mic only works over USB; plug it in or set GP_MIC')
     })
@@ -94,9 +112,12 @@ export class RadioVoice {
     this.ptt.on('up', () => void this.released())
     this.ptt.start()
     this.gateTimer = setInterval(() => {
-      const live = this.d.state.snapshot().status === 'live'
+      const snap = this.d.state.snapshot()
+      const live = snap.status === 'live'
+      // Pit lane: speed-limited, no corners worth protecting.
+      const inPits = !!snap.cars.find((c) => c.isPlayer)?.pitStatus
       const straight = this.gate.update(this.d.state.playerInputs())
-      this.clearToTalk = !live || process.env.GP_TALK_IN_CORNERS === '1' || straight
+      this.clearToTalk = !live || inPits || process.env.GP_TALK_IN_CORNERS === '1' || straight
     }, 50)
 
     // Stream typed and spoken answers into speech as they're written.
@@ -182,8 +203,10 @@ export class RadioVoice {
     const stream = this.stream
     if (!stream) return
     this.stream = null
-    const pcm = this.mic.end()
     this.d.toAudio({ type: 'beep', kind: 'close' })
+    // People let go of the button on their last word; keep listening a moment longer.
+    await new Promise((r) => setTimeout(r, POST_ROLL_MS))
+    const pcm = this.mic.end()
     const heldMs = (pcm.length / 2 / SAMPLE_RATE) * 1000
     if (heldMs < MIN_UTTERANCE_MS) {
       stream.cancel()
@@ -367,6 +390,7 @@ export class RadioVoice {
   }
 
   stop(): void {
+    this.stopped = true
     if (this.gateTimer) clearInterval(this.gateTimer)
     this.ptt.stop()
     this.mic.stop()

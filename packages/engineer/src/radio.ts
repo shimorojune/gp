@@ -209,7 +209,19 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
  * Automatic calls are one fact and maybe an instruction. The model still runs long now and
  * then, so keep the first two sentences and stop there.
  */
-export function trimCall(text: string, maxSentences = 2): string {
+export function trimCall(text: string, maxSentences = 2, maxWords = 16): string {
+  const words = (t: string) =>
+    t
+      .replace(/<[^>]*>/g, ' ')
+      .split(/\s+/)
+      .filter(Boolean).length
+  const first = trimSentences(text, 1)
+  // Two sentences that run long: the first one is the news, keep just that.
+  if (words(text) > maxWords && words(first) >= 5) return first
+  return trimSentences(text, maxSentences)
+}
+
+function trimSentences(text: string, maxSentences: number): string {
   // An ellipsis is a beat, not the end of a sentence.
   const parts = text
     .trim()
