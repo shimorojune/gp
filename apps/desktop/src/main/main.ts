@@ -195,6 +195,15 @@ app.whenReady().then(async () => {
   }, 100)
 })
 
+process.on('uncaughtException', (e) => console.error('[main] uncaught', e))
+process.on('unhandledRejection', (e) => console.error('[main] unhandled rejection', e))
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const)
+  process.on(sig, () => {
+    console.log(`[main] ${sig}, quitting`)
+    app.quit()
+  })
+app.on('before-quit', () => console.log('[main] quitting'))
+
 app.on('will-quit', () => {
   globalShortcut.unregisterAll()
   voice.stop()

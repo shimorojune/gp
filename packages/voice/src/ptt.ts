@@ -75,7 +75,7 @@ export class DualSensePtt extends TypedEmitter<PttEvents> {
     }
   }
 
-  private drop(): void {
+  private drop(announce = true): void {
     try {
       this.dev?.close()
     } catch {}
@@ -84,12 +84,12 @@ export class DualSensePtt extends TypedEmitter<PttEvents> {
       this.pressed = false
       this.emit('up', undefined)
     }
-    this.emit('disconnected', undefined)
+    if (announce) this.emit('disconnected', undefined)
   }
 
   stop(): void {
     if (this.retry) clearInterval(this.retry)
     this.retry = null
-    this.drop()
+    this.drop(false)
   }
 }
