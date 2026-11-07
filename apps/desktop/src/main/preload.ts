@@ -1,5 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { type GpBridge, IPC, type SnapshotMessage } from '../ipc.ts'
+import {
+  type ChatBridge,
+  type ChatEvent,
+  type GpBridge,
+  IPC,
+  type SnapshotMessage,
+} from '../ipc.ts'
 
 const bridge: GpBridge = {
   onSnapshot(cb) {
@@ -10,3 +16,13 @@ const bridge: GpBridge = {
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)
+
+const chat: ChatBridge = {
+  ask: (text) => ipcRenderer.invoke(IPC.chatAsk, text),
+  hide: () => ipcRenderer.send(IPC.chatHide),
+  onEvent(cb) {
+    ipcRenderer.on(IPC.chatEvent, (_e, ev: ChatEvent) => cb(ev))
+  },
+}
+
+contextBridge.exposeInMainWorld('gpChat', chat)

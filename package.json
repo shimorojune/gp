@@ -2,7 +2,9 @@
   "name": "gp",
   "private": true,
   "packageManager": "pnpm@10.28.0",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
@@ -12,7 +14,8 @@
     "record": "pnpm --filter @gp/cli record",
     "replay": "pnpm --filter @gp/cli replay",
     "inspect": "pnpm --filter @gp/cli inspect",
-    "desktop": "pnpm --filter @gp/desktop dev"
+    "desktop": "pnpm --filter @gp/desktop dev",
+    "chat": "pnpm --filter @gp/cli chat"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",

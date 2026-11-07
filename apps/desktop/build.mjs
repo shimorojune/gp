@@ -11,7 +11,8 @@ await Promise.all([
     outfile: 'dist/main.cjs',
     platform: 'node',
     format: 'cjs',
-    external: ['electron'],
+    // The SDK locates its native Claude Code binary relative to its own package; don't bundle it.
+    external: ['electron', '@anthropic-ai/claude-agent-sdk'],
   }),
   build({
     ...common,
@@ -23,6 +24,14 @@ await Promise.all([
   }),
   build({
     ...common,
+    entryPoints: ['src/renderer/chat.ts'],
+    outfile: 'dist/renderer/chat.js',
+    platform: 'browser',
+    format: 'iife',
+    target: 'chrome120',
+  }),
+  build({
+    ...common,
     entryPoints: ['src/renderer/app.ts'],
     outfile: 'dist/renderer/app.js',
     platform: 'browser',
@@ -31,3 +40,4 @@ await Promise.all([
   }),
 ])
 cpSync('src/renderer/index.html', 'dist/renderer/index.html')
+cpSync('src/renderer/chat.html', 'dist/renderer/chat.html')

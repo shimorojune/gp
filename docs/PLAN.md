@@ -353,11 +353,15 @@ That's fine for "how are the tyres?" and useless for "brake now". Hence:
 
 ## 9. Persona and prompt design
 
-Lambiase-inspired, not an impersonation. A short, versioned system prompt covering:
+Rohit's ask (2026-11-07): GP should have the personality, sarcasm and racing intelligence
+of the real GP with Max. The prompt lives in `packages/engineer/src/persona.ts` and covers:
 
-- **Character:** calm under pressure, direct, dry and cutting humour, swears freely,
-  nothing off limits. Protective of the driver but won't sugarcoat a bad stint. Says "copy",
-  "box box", "push now", "we're checking". No cheerleading.
+- **Character:** calm, flat delivery under pressure, bone-dry sarcasm, blunt, pushes back
+  ("we'll discuss it after the race"), swears freely, nothing off limits. Respect is shown
+  sparingly so it lands. Thinks laps ahead about tyres, gaps, undercut and safety cars.
+- **Racing craft:** praises overtakes, places gained and gaps closing; is honest about places
+  lost. Gives targets: lap time to hit, where the time is by sector, laps to catch the car
+  ahead and the lap time needed (the `get_pace_targets` tool).
 - **Radio discipline by context** (we pass the context in each message):
   - *On track, racing:* you asked for more commentary, so he talks more than the real
     GP would: lap-by-lap pace notes, what rivals are doing, the odd joke on a straight.
@@ -475,7 +479,17 @@ we'd stop and rethink before going further.
 - Minimal Electron window showing live state.
 - **Ship:** a live debug dashboard and your first recorded sessions.
 
-### Phase 2 — Text chat engineer on a hotkey (1 week)
+### Phase 2 — Text chat engineer on a hotkey (1 week) — **built 2026-11-07, testing on the Mac**
+
+Built: `packages/engineer` (persona, race tools incl. `get_pace_targets`, notes in
+`~/Documents/GP/notes.json`, one warm SDK session), `pnpm chat` in the terminal against live
+telemetry or `--replay file.gprec [--until 600]`, and a radio overlay in the desktop app on
+Cmd+Shift+G. Model routing: what the driver asks goes to Sonnet; automatic checks (lap done,
+overtakes) go to Haiku in the same conversation (model switched per turn) to save usage.
+The engineer may answer an automatic check with `(silent)` to skip a pointless call.
+Not done yet from the original list: new SDK session per game session, Notes tab in the UI.
+
+Original scope:
 
 - Toggle key opens an always-on-top overlay with a text box and radio log.
 - Agent SDK session with persona prompt and read-only tools over `RaceState` + SQLite.

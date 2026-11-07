@@ -1,8 +1,11 @@
 #!/usr/bin/env -S npx tsx
 import dgram from 'node:dgram'
 import { mkdirSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
+import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
 import { formatLapTime } from '@gp/shared'
 import {
   DEFAULT_PORT,
@@ -26,6 +29,11 @@ const USAGE = `gp <command> [options]
           Summarise a recording: duration, packet counts, sessions, player laps.
   live    [--port 20777]
           Print a compact live view of the race state.
+  chat    [--replay file.gprec [--speed 1] [--until 600]] [--port 20777]
+          [--model sonnet] [--check-model haiku] [--no-radio]
+          Talk to the engineer in the terminal, against live telemetry or a recording.
+          --until replays up to that many seconds as fast as possible, then freezes there.
+          Needs a Claude Code login on this machine (claude /login).
 `
 
 // pnpm runs scripts from the package dir; resolve user paths against where they ran pnpm.
@@ -42,6 +50,11 @@ const { values, positionals } = parseArgs({
     speed: { type: 'string' },
     to: { type: 'string' },
     loop: { type: 'boolean' },
+    replay: { type: 'string' },
+    until: { type: 'string' },
+    model: { type: 'string' },
+    'check-model': { type: 'string' },
+    'no-radio': { type: 'boolean' },
   },
 })
 const port = values.port ? Number(values.port) : DEFAULT_PORT
@@ -58,6 +71,9 @@ switch (command) {
     break
   case 'live':
     await live()
+    break
+  case 'chat':
+    await chat()
     break
   default:
     process.stdout.write(USAGE)
@@ -204,4 +220,153 @@ async function live(): Promise<void> {
   }, 250)
   await new Promise<void>((done) => process.once('SIGINT', () => done()))
   await listener.stop()
+}
+
+async function chat(): Promise<void> {
+  const gpHome = process.env.GP_HOME ?? join(homedir(), 'Documents', 'GP')
+  const engineerCwd = join(gpHome, 'engineer')
+  mkdirSync(engineerCwd, { recursive: true })
+  const notes = new NotesStore(join(gpHome, 'notes.json'))
+
+  // In replay mode the state's clock follows the recording, so "live/paused" match the race.
+  let recClock = 0
+  let recWall = Date.now()
+  let frozen = false
+  const replayFile = values.replay ? resolve(cwd, values.replay) : null
+  const state = replayFile
+    ? new RaceState({ now: () => recClock + (frozen ? 0 : Date.now() - recWall) })
+    : new RaceState()
+
+  const engineer = new EngineerSession({
+    snapshot: () => state.snapshot(),
+    notes,
+    cwd: engineerCwd,
+    ...(values.model ? { model: values.model } : {}),
+    ...(values['check-model'] ? { checkModel: values['check-model'] } : {}),
+  })
+
+  const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
+  const say = (line: string) => {
+    // Print above the prompt without clobbering what the driver is typing.
+    process.stdout.write(`\r\x1b[2K${line}\n`)
+    rl.prompt(true)
+  }
+
+  let streaming = false
+  engineer.on('delta', ({ kind, text }) => {
+    if (kind !== 'ask') return
+    if (!streaming) {
+      process.stdout.write('\x1b[33mGP>\x1b[0m ')
+      streaming = true
+    }
+    process.stdout.write(text)
+  })
+  engineer.on('tool', ({ kind, name }) => {
+    if (kind === 'ask' && process.env.GP_DEBUG)
+      say(`  \x1b[2m[${name.replace('mcp__race__', '')}]\x1b[0m`)
+  })
+  engineer.on('error', (e) => say(`engineer error: ${e.message}`))
+
+  if (!values['no-radio']) {
+    attachRadio(state, engineer, {
+      onCall: (r) =>
+        say(`\x1b[36mGP (radio)>\x1b[0m ${r.text}  \x1b[2m(${r.model}, ${r.totalMs}ms)\x1b[0m`),
+    })
+  }
+
+  let listener: TelemetryListener | null = null
+  const ac = new AbortController()
+  if (replayFile) {
+    const until = values.until ? Number(values.until) * 1000 : null
+    const speed = until !== null ? Number.POSITIVE_INFINITY : Number(values.speed ?? 1)
+    console.log(
+      `replaying ${replayFile}${until !== null ? ` up to ${until / 1000}s` : ` at ${speed}x`}`,
+    )
+    void (async () => {
+      let n = 0
+      for await (const pkt of replayRecording(replayFile, { speed, signal: ac.signal })) {
+        if (until !== null && pkt.t > until) break
+        recClock = pkt.t
+        recWall = Date.now()
+        const res = parsePacket(pkt.buf)
+        if (res.ok) state.ingest(res.packet)
+        if (!Number.isFinite(speed) && ++n % 2000 === 0) await new Promise((r) => setImmediate(r))
+      }
+      if (until !== null) {
+        frozen = true
+        state.tick()
+        say(`(frozen at ${(recClock / 1000).toFixed(0)}s: ${statusLine()})`)
+      } else say('(recording finished)')
+    })()
+  } else {
+    listener = new TelemetryListener({ port })
+    listener.on('packet', (p) => state.ingest(p))
+    await listener.start()
+    console.log(`listening for F1 23 telemetry on UDP :${port}`)
+  }
+
+  function statusLine(): string {
+    const s = state.snapshot()
+    const me = s.cars.find((c) => c.isPlayer)
+    return [
+      s.status,
+      s.session ? `${s.session.track} ${s.session.sessionType}` : 'no session',
+      me ? `lap ${me.currentLap} P${me.position}` : '',
+    ]
+      .filter(Boolean)
+      .join(' · ')
+  }
+
+  console.log(
+    'Type to talk to GP. /status shows the race state, /notes lists his notes, /quit exits.',
+  )
+  engineer.start()
+  rl.prompt()
+  let busy = false
+  for await (const line of rl) {
+    const text = line.trim()
+    if (!text) {
+      rl.prompt()
+      continue
+    }
+    if (text === '/quit') break
+    if (text === '/status') {
+      say(statusLine())
+      continue
+    }
+    if (text === '/notes') {
+      const all = notes.all()
+      say(
+        all.length
+          ? all.map((n) => `  ${n.id} [${n.category}] ${n.text}`).join('\n')
+          : '  (no notes yet)',
+      )
+      continue
+    }
+    if (busy) {
+      say('(still answering, hang on)')
+      continue
+    }
+    busy = true
+    streaming = false
+    engineer
+      .ask(text)
+      .then((r) => {
+        if (!streaming) process.stdout.write(`\x1b[33mGP>\x1b[0m ${r.text}`)
+        process.stdout.write(
+          `\n\x1b[2m(${r.model}, first words ${r.firstTextMs ?? '-'}ms, total ${r.totalMs}ms${r.toolCalls.length ? `, tools: ${r.toolCalls.map((t) => t.replace('mcp__race__', '')).join(', ')}` : ''})\x1b[0m\n`,
+        )
+      })
+      .catch((e: Error) => say(`error: ${e.message}`))
+      .finally(() => {
+        busy = false
+        streaming = false
+        rl.prompt()
+      })
+  }
+  ac.abort()
+  rl.close()
+  await listener?.stop()
+  await engineer.close()
+  process.exit(0)
 }

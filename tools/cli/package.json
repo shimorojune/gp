@@ -3,18 +3,22 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "bin": { "gp": "./src/main.ts" },
+  "bin": {
+    "gp": "./src/main.ts"
+  },
   "scripts": {
     "record": "tsx src/main.ts record",
     "replay": "tsx src/main.ts replay",
     "inspect": "tsx src/main.ts inspect",
     "live": "tsx src/main.ts live",
     "typecheck": "tsc -p .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "chat": "tsx src/main.ts chat"
   },
   "dependencies": {
     "@gp/shared": "workspace:*",
-    "@gp/telemetry": "workspace:*"
+    "@gp/telemetry": "workspace:*",
+    "@gp/engineer": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.19.2"

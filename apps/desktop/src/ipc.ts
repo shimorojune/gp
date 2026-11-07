@@ -5,7 +5,25 @@ export const IPC = {
   toggleRecording: 'gp:toggle-recording',
   recordingState: 'gp:recording-state',
   toggleOnTop: 'gp:toggle-on-top',
+  chatAsk: 'gp:chat-ask',
+  chatEvent: 'gp:chat-event',
+  chatHide: 'gp:chat-hide',
 } as const
+
+/** Engineer output pushed to the chat overlay. */
+export type ChatEvent =
+  | { type: 'delta'; id: number; text: string }
+  | {
+      type: 'reply'
+      id: number
+      text: string
+      model: string
+      firstTextMs: number | null
+      totalMs: number
+      tools: string[]
+    }
+  | { type: 'radio'; text: string; model: string }
+  | { type: 'error'; message: string }
 
 export interface RecordingState {
   recording: boolean
@@ -31,4 +49,11 @@ export interface GpBridge {
   onSnapshot(cb: (msg: SnapshotMessage) => void): void
   toggleRecording(): Promise<RecordingState>
   toggleOnTop(): Promise<boolean>
+}
+
+/** What the chat overlay's preload exposes on `window.gpChat`. */
+export interface ChatBridge {
+  ask(text: string): Promise<void>
+  hide(): void
+  onEvent(cb: (e: ChatEvent) => void): void
 }

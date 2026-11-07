@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>GP radio</title>
+    <style>
+      :root { --text: #e6e8eb; --muted: #8a939e; --gp: #f2b33d; --radio: #4fc3f7; --bad: #ef4b4b; }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; background: transparent; }
+      body {
+        color: var(--text);
+        font: 14px/1.45 -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      }
+      .shell {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        background: rgba(13, 15, 18, 0.88);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        overflow: hidden;
+      }
+      .bar {
+        -webkit-app-region: drag;
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 6px 12px; font-size: 11px; letter-spacing: 0.1em; color: var(--muted);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      }
+      #log { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+      .msg .who { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; margin-right: 6px; }
+      .you .who { color: var(--muted); }
+      .gp .who { color: var(--gp); }
+      .radio .who { color: var(--radio); }
+      .err { color: var(--bad); }
+      .meta { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+      form { display: flex; border-top: 1px solid rgba(255, 255, 255, 0.06); }
+      input {
+        flex: 1; border: 0; outline: 0; padding: 10px 12px; background: transparent;
+        color: var(--text); font: inherit;
+      }
+      input::placeholder { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="bar"><span>GP · RADIO</span><span>esc to hide</span></div>
+      <div id="log"></div>
+      <form id="form"><input id="input" placeholder="Talk to GP…" autocomplete="off" autofocus /></form>
+    </div>
+    <script src="chat.js"></script>
+  </body>
+</html>

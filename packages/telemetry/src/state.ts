@@ -44,6 +44,9 @@ export interface CompletedLap {
   tyreVisual: string | null
   tyreAgeLaps: number | null
   fuelKg: number | null
+  /** Race position and gaps as the lap ended (gap trend = are we catching / being caught). */
+  position: number
+  gapAheadMs: number
   sessionTime: number
 }
 
@@ -310,6 +313,8 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
           tyreVisual: st ? (VISUAL_COMPOUNDS[st.visualTyreCompound] ?? null) : null,
           tyreAgeLaps: st ? st.tyresAgeLaps : null,
           fuelKg: st ? st.fuelInTank : null,
+          position: cur.carPosition,
+          gapAheadMs: cur.deltaToCarInFrontInMS,
           sessionTime: this.sessionTime,
         }
         if (isPlayer) this.playerLaps.push(completed)
