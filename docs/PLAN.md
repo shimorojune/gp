@@ -1,6 +1,9 @@
 # GP — a personal AI race engineer for F1 2020
 
-Status: plan only, nothing built yet. Last updated 2026-11-07.
+Status: plan only, nothing built yet. Last updated 2026-11-07 (v2, with Rohit's answers folded in).
+
+**Target setup:** Apple M4, 32 GB RAM. PS5 DualSense controller. Claude Max 5x. All game
+modes, races at 50%+. Strictly personal use. pnpm monorepo.
 
 ## 1. What we're building
 
@@ -72,9 +75,33 @@ Supporting pieces:
 | State | Plain TS store in main, pushed to renderer over IPC | No Redux needed |
 | Persistence | `better-sqlite3` | Laps, stints, setups, notes |
 | Validation | `zod` | Tool schemas for the Agent SDK use zod anyway |
-| Hotkey | `uiohook-napi` | Electron `globalShortcut` only fires on press, PTT needs release too |
-| STT | `whisper.cpp` (local, Metal) via a small native/CLI wrapper | See §6 |
-| TTS | Start with a cloud voice (ElevenLabs/OpenAI), keep macOS `say` as offline fallback | See §6 |
+| Push-to-talk | Swift GameController helper (DualSense) + `uiohook-napi` (keyboard backup) | See §5. Electron `globalShortcut` only fires on press, PTT needs release too |
+| STT | `whisper.cpp` (local, Metal) with `large-v3-turbo` | M4 + 32 GB handles it. See §6 |
+| TTS | ElevenLabs streaming (Flash model), macOS `say` as offline fallback | You're OK paying. See §6 |
+| Monorepo | pnpm workspaces + Turborepo | See §3.1 |
+
+### 3.1 Monorepo layout
+
+```
+gp/
+├── apps/
+│   └── desktop/            Electron app: main process wiring, renderer UI (React)
+├── packages/
+│   ├── shared/             shared types (RaceState, events), zod schemas, logger
+│   ├── telemetry/          F1 2020 UDP parser, RaceState store, recorder, derived metrics
+│   ├── strategy/           pure functions: deg model, fuel, pit window, undercut, weather
+│   ├── callouts/           rule engine, priority queue, safe-to-talk gate, line templates
+│   ├── engineer/           Agent SDK session, persona prompt, MCP tools, memory
+│   ├── voice/              STT/TTS adapters, audio playback, radio effect
+│   └── input/              PTT sources: Swift DualSense helper + keyboard hook
+├── tools/
+│   ├── replay/             CLI: play recorded sessions into the app at 1x–20x
+│   └── evals/              recorded situations + expected engineer behaviour
+└── docs/PLAN.md
+```
+
+`telemetry`, `strategy` and `callouts` have no Electron dependency, so they're unit-tested
+with Vitest against recorded sessions and can be reused if you ever move to a newer F1 game.
 
 ## 4. Telemetry: getting data out of F1 2020
 
@@ -144,17 +171,40 @@ Caveats:
 - Exact struct layouts must be checked against Codemasters' published 2020 spec before we
   trust offsets. Phase 1 includes a validation step against recorded packets.
 
-## 5. Push-to-talk hotkey
+## 5. Push-to-talk on the PS5 controller
 
-- Use `uiohook-napi` for global keydown/keyup. It needs **Accessibility** and **Input
-  Monitoring** permission in macOS settings, plus **Microphone** for capture.
-- macOS sees the key before Wine does, so it works while the game has focus. The key is
-  *also* delivered to the game, so pick one the game doesn't use (e.g. a function key or
-  a spare keypad key).
-- Better later: a **wheel/controller button**. Reading the HID device in parallel with the
-  game (non-exclusive `node-hid`) usually works on macOS but depends on your wheel. Put it
-  in the "nice to have" pile until we know what you drive with.
-- Two modes: hold-to-talk (default), and a separate toggle key to open the text overlay.
+You drive with a DualSense, so push-to-talk is a controller button, with a keyboard key
+as backup.
+
+**Which button.** L3/R3 work, but F1 2020 may already bind them (check *Controls*), and
+clicking a stick mid-corner is a bad idea. Better candidates, in order:
+
+1. **Mic mute button** (the small one under the PS button). The game almost certainly
+   ignores it.
+2. **Touchpad click**, if it's unbound in-game.
+3. L3 or R3 after unbinding it in the game's controls.
+
+**How we read it while the game has focus.** This is the main technical question here.
+
+- **Primary: a tiny Swift helper using Apple's GameController framework** with
+  `GCController.shouldMonitorBackgroundEvents = true` (macOS 11.3+). That lets a background
+  app see button presses while another app is focused. The helper prints button down/up
+  events as JSON lines on stdout; the Electron main process spawns it and reads them.
+  About 60 lines of Swift, built once with `swiftc`.
+- **Fallback: `node-hid`** reading the DualSense HID reports directly (non-exclusive). The
+  mute button and touchpad click are bits in the input report.
+- **Not usable:** Chromium's Gamepad API in the renderer. It only reports input to a focused
+  window.
+
+**Unknown until tested:** whether CrossOver/Wine opens the controller *exclusively*, which
+would starve our helper. macOS normally allows shared access, but this goes in Phase 0.
+
+**Keyboard backup:** `uiohook-napi` for global keydown/keyup (needs Accessibility and Input
+Monitoring permission). Pick a key the game doesn't use. Microphone permission is needed
+either way.
+
+Modes: hold-to-talk (default), double-tap to toggle the text overlay, and a long hold to
+tell him to shut up for now.
 
 ## 6. Speech in and out
 
@@ -171,9 +221,10 @@ Claude doesn't do audio, so we bolt on STT and TTS.
 We feed whisper an initial prompt with track names, driver names and terms ("undercut",
 "box", "diff", "brake bias") to cut misrecognition.
 
-**Uncertainty:** the game and whisper share the CPU/GPU. If you're on Apple Silicon running
-F1 2020 through D3DMetal/DXVK, the GPU is already busy. Whisper on short clips should be
-fine but we measure it, not assume it.
+On your M4 with 32 GB, `large-v3-turbo` should transcribe a 3s clip in roughly 0.3–0.6s.
+**Uncertainty:** the game is already using the GPU through CrossOver's translation layer,
+so we measure whisper with the game running in Phase 0 rather than assume. If it fights the
+game, drop to `small.en` or move to Deepgram streaming.
 
 ### Text to speech
 
@@ -183,7 +234,10 @@ fine but we measure it, not assume it.
 | Local neural (Piper / Kokoro) | ~0.2–0.5s | Decent | Free |
 | ElevenLabs / OpenAI TTS (streaming) | ~0.3–0.8s | Yes, best | Paid, small |
 
-Plan: start with `say` to unblock, move to a good voice in Phase 3. We stream by sentence
+Plan: ElevenLabs streaming (Flash model, lowest latency) from Phase 3, with `say` as the
+offline fallback. Expect a few dollars to low tens of dollars a month depending on how much
+he talks, which with "more commentary" will be a lot. We'll cache audio for repeated
+template lines to cut both cost and latency. We stream by sentence
 so he starts talking before Claude has finished the reply. A short radio "click" and a
 light band-pass filter sells the radio feel cheaply.
 
@@ -204,8 +258,11 @@ not crossing, and it isn't needed for the vibe.
   `set_callout_prefs`.
 - Lock it down: allow only our MCP tools, no Bash/file editing/web, and don't load your
   user/project Claude Code settings (`settingSources: []`). He's an engineer, not a coding agent.
-- Model per job: a fast model (Haiku tier) for in-race radio replies, a stronger model
-  (Sonnet/Opus tier) for setup work and post-session debriefs.
+- Model per job: you're on Max 5x and said use as much as needed, so quality wins where
+  latency allows. Sonnet tier by default for radio conversation (good balance of speed and
+  wit), Opus tier for setup work, strategy deep-dives under safety car and post-race
+  debriefs. Haiku tier only for the low-priority "colour commentary" lines in §9, where
+  speed matters more than depth. We'll compare latency in Phase 0 and adjust.
 
 ### Auth: what's allowed, plainly
 
@@ -229,9 +286,9 @@ change again. Practical consequences:
 
 - Build the engineer behind a small `EngineerBackend` interface so switching to an API key
   is a config change, not a rewrite.
-- Watch your usage. A chatty engineer across a 50% race plus a debrief is fine; leaving
-  LLM-generated callouts on every lap of every practice session will eat into your
-  5-hour window.
+- Watch your usage. Max 5x is generous, but "more commentary" across long races in every
+  mode plus Opus debriefs is real volume. The overlay will show tokens per session so we
+  can see if you get near the 5-hour limit, and fall back to a cheaper model if so.
 
 ### Packaging gotcha
 
@@ -265,21 +322,44 @@ That's fine for "how are the tyres?" and useless for "brake now". Hence:
 
 Lambiase-inspired, not an impersonation. A short, versioned system prompt covering:
 
-- **Character:** calm under pressure, direct, dry and occasionally cutting humour, protective
-  of the driver but won't sugarcoat a bad stint. Says "copy", "box box", "push now", "we're
-  checking". No cheerleading.
+- **Character:** calm under pressure, direct, dry and cutting humour, swears freely,
+  nothing off limits. Protective of the driver but won't sugarcoat a bad stint. Says "copy",
+  "box box", "push now", "we're checking". No cheerleading.
 - **Radio discipline by context** (we pass the context in each message):
-  - *On track, racing:* one or two sentences, numbers first, ~15 words max. No jokes
-    unless under safety car or you start it.
+  - *On track, racing:* you asked for more commentary, so he talks more than the real
+    GP would: lap-by-lap pace notes, what rivals are doing, the odd joke on a straight.
+    Still numbers first and short per message (~20 words), because long messages land in
+    braking zones. Verbosity is a setting (`quiet` / `normal` / `chatty`, default `chatty`)
+    you can change by voice mid-race.
   - *Safety car / VSC / cool-down / paused:* longer, banter allowed.
   - *Garage, practice debrief, menus:* full conversation, any topic.
 - **Grounding:** never state a number not returned by a tool. If data isn't available,
   say so ("we don't have that, mate"). This is the main guard against made-up gaps.
 - **Strategy honesty:** give a recommendation and the reason, flag uncertainty ("weather
   radar says 40% in 8 minutes, I wouldn't bet on it").
-- **Memory:** knows your habits from stored notes (you lock fronts into T1 at Monza, you
-  prefer a pointy car, etc.).
+- **Memory:** see §9.1. He takes notes on your preferences and habits and gets better at
+  working with you over time.
 - **Off-topic:** free conversation is fine; he stays in character but doesn't refuse.
+
+### 9.1 Evolving memory
+
+You want him to keep learning your preferences. Design:
+
+- **Notes store (SQLite):** each note has a category (`driving`, `setup`, `radio`,
+  `personal`, `track:<id>`), the text, where it came from (you said it / he inferred it
+  from telemetry), a confidence, and timestamps.
+- **Writing notes:** a `remember_note` tool he calls when you state a preference
+  ("stop telling me sector times") or he notices a pattern ("locks the front-left into T1
+  at Monza on 4 of 5 laps"). Explicit statements from you win over inferences.
+- **Reading notes:** relevant notes (global + current track) go into the session's system
+  prompt at the start, so he doesn't need a tool call to remember who you are.
+- **Curating:** at the end of each session an Opus pass merges duplicates, updates stale
+  notes and drops ones you've contradicted. Without this the notes pile up and contradict
+  each other within a few weeks.
+- **Visible and editable:** a Notes tab in the app lists everything he "knows" so you can
+  delete wrong ones. Also by voice: "forget that".
+- Some preferences are also settings the code reads directly (verbosity, which callouts
+  are on, units), not just prompt text, so they reliably take effect.
 
 Prompt and tool schemas live in the repo with a small eval set of recorded situations
 (replayed telemetry + a question + what a good answer looks like) so persona tweaks don't
@@ -294,8 +374,13 @@ Each phase ends with something you can use. Rough effort assumes evenings/weeken
 - [ ] UDP from CrossOver reaches a Node `dgram` listener on the Mac (§4).
 - [ ] Agent SDK `query()` works from Node on your Mac using your logged-in subscription;
       measure warm time-to-first-token with a fast model.
-- [ ] `uiohook-napi` sees keydown/keyup while F1 2020 has focus; macOS permissions sorted.
-- [ ] whisper.cpp transcribes a 3s clip in acceptable time **while the game is running**.
+- [ ] Swift GameController helper sees the DualSense mute/touchpad button down/up while
+      F1 2020 has focus (i.e. CrossOver doesn't grab the controller exclusively). Keyboard
+      fallback via `uiohook-napi` checked too.
+- [ ] whisper.cpp `large-v3-turbo` transcribes a 3s clip in acceptable time **while the
+      game is running**, with no frame drops in-game.
+- [ ] Scaffold the pnpm monorepo (empty packages, lint, typecheck, Vitest) so the spikes
+      land in the right place.
 
 If UDP fails and none of the fallbacks work, the project as described is in trouble;
 we'd stop and rethink before going further.
@@ -317,6 +402,7 @@ we'd stop and rethink before going further.
 - Agent SDK session with persona prompt and read-only tools over `RaceState` + SQLite.
 - Session lifecycle: new SDK session per game session (`sessionUID` changes), summary
   carried over.
+- Notes store and `remember_note` tool (§9.1), Notes tab in the UI.
 - **Ship:** type "how did that stint compare to the last one?" between sessions or while
   paused and get grounded answers.
 
@@ -346,8 +432,11 @@ we'd stop and rethink before going further.
 - Priority queue with cooldowns so he isn't chatty.
 - "Safe to talk" gate from telemetry: speak on straights (high throttle, low steer, low
   lateral g), hold non-urgent calls through corners.
-- Templated lines with variants; optional low-priority LLM flavour only when idle.
-- Voice commands: "quiet", "only gaps", "full info".
+- Templated lines with variants for urgent/time-critical calls.
+- "Colour commentary" layer for `chatty` mode: on long straights or quiet laps, a fast
+  model gets a compact state diff and writes one line (rival battles, pace trend, a joke).
+  It's generated ahead of time and dropped if stale by the time there's a safe window.
+- Voice commands: "quiet", "only gaps", "more chat".
 - **Ship:** he talks you through a race without being asked.
 
 ### Phase 6 — Setup engineer (2 weeks, hardest to get genuinely good)
@@ -367,13 +456,13 @@ practice/quali feature.
 
 ### Phase 7 — Memory and personality polish (ongoing)
 
-- Cross-session memory: your tendencies, favourite tracks, running jokes, last race.
+- Tune memory curation (§9.1) once there are a few weeks of notes.
+- Running jokes and callbacks to previous races.
 - Post-race debrief with a stronger model.
 - Persona eval set and tuning.
 
 ### Later / maybe
 
-- Wheel button PTT via HID.
 - Other games (F1 23/24 have richer telemetry; the parser layer would be per-format).
 - Second screen dashboard.
 
@@ -384,26 +473,33 @@ practice/quali feature.
 | UDP doesn't leave CrossOver | Low–medium | Fatal | Phase 0 spike first; LAN IP/broadcast fallbacks |
 | Subscription use of Agent SDK changes again (limits, credit pool, policy) | Medium | High | Backend interface, API-key path ready, keep LLM calls lean |
 | Voice round trip too slow to feel like a radio | Medium | Medium | Fast model, short replies, sentence streaming, deterministic callouts |
-| CPU/GPU contention with the game under translation | Medium | Medium | Measure in Phase 0; cloud STT/TTS as fallback |
+| CPU/GPU contention with the game under translation | Low–medium (M4, 32 GB) | Medium | Measure in Phase 0; smaller whisper model or cloud STT as fallback |
 | He makes up numbers | Medium | High (trust) | Tools-only numbers rule, compact tool outputs, eval set |
 | He's annoying (too chatty, bad jokes at bad moments) | High at first | Medium | Cooldowns, context-aware radio rules, "quiet" command |
 | Setup advice is generic/unhelpful | High | Medium | Ground in telemetry diffs; treat as last, hardest phase |
-| PTT key clashes with game input | Low | Low | Pick unbound key; later wheel button |
-| Electron packaging with SDK subprocess | Medium | Low | Run unpackaged for personal use |
+| CrossOver grabs the DualSense exclusively, so PTT can't see it | Low–medium | Medium | Phase 0 spike; node-hid fallback; keyboard key as last resort |
+| Memory notes drift or contradict each other | Medium | Medium | End-of-session curation pass, editable Notes tab |
+| Chatty mode is annoying or burns usage | Medium | Low | Verbosity setting, token counter in overlay |
+| Electron packaging with SDK subprocess | Medium | Low | Run unpackaged; personal use only, no need for a signed app |
 | 2020 packet offsets wrong | Low | Medium | Validate against spec and recorded data in Phase 1 |
 
-## 12. Open questions for Rohit
+## 12. Decisions (answered 2026-11-07)
 
-1. **Mac:** Apple Silicon or Intel, and how much RAM? Decides whether local whisper/TTS
-   is comfortable alongside the game.
-2. **Input:** wheel, controller or keyboard? Which spare button/key for push-to-talk?
-3. **Paid voice:** OK paying a few dollars a month for a good cloud TTS voice, or local only?
-4. **Which subscription plan** (Pro, Max 5x, Max 20x)? Sets how much LLM chatter we can afford.
-5. **Modes you actually play:** career, Grand Prix, online, time trial? Race length? This
-   decides how much strategy logic matters versus pace coaching.
-6. **How chatty by default** during a race: GP-level minimal, or more commentary?
-7. **Language/tone:** any lines off limits for the humour? Swearing OK?
-8. **Distribution:** strictly personal forever, or might friends use it? If the latter,
-   it needs API-key auth from the start (see §7).
-9. **Repo layout:** single Electron app, or a small monorepo (`packages/telemetry`,
-   `packages/engineer`, `apps/desktop`) so the telemetry parser is reusable?
+| Question | Answer | What it changes |
+|---|---|---|
+| Mac | Apple M4, 32 GB | Local whisper `large-v3-turbo` is the default STT |
+| Input | PS5 DualSense, any spare button | PTT via Swift GameController helper (§5) |
+| Paid voice | Yes | ElevenLabs streaming TTS |
+| Claude plan | Max 5x, use as needed | Sonnet/Opus tiers by default (§7) |
+| Modes | All modes, races 50%+ | Strategy (Phase 4) matters as much as pace |
+| Chattiness | More commentary, plus evolving memory of preferences | `chatty` default, colour commentary layer, §9.1 memory |
+| Tone | Swearing fine, nothing off limits | Persona prompt has no content restrictions on humour |
+| Distribution | Strictly personal | Subscription auth is fine; no API-key path needed now (kept as fallback) |
+| Repo | Monorepo | pnpm + Turborepo layout in §3.1 |
+
+## 13. Still open
+
+1. Which DualSense button you actually prefer once we see what F1 2020 has bound
+   (we'll check in Phase 0).
+2. A name for him. "GP" is the obvious one; your call.
+3. Voice: pick one from the ElevenLabs library together in Phase 3.
