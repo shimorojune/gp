@@ -434,7 +434,35 @@ we'd stop and rethink before going further.
 - Agent SDK on the Max login: no auth issues. Warm time-to-first-text ~1.6–1.7s for both
   Haiku and Sonnet tiers; API time ~0.9s Haiku, ~1.1–1.6s Sonnet. A fresh `query()` per message
   adds 3–5s of CLI process start/stop, so the long-lived streaming session is mandatory.
-- Still to do: DualSense PTT with the game focused, whisper speed with the game running.
+- **DualSense PTT works with the game focused, no permission prompts.** Apple's GameController
+  framework (background monitoring) sees every button except mic-mute. Mic-mute is read via
+  non-exclusive `node-hid` (report 0x31, byte 11, bit 0x04) alongside the game. The game uses
+  the touchpad, so **mic-mute is the push-to-talk button**.
+- **Mic:** the DualSense mic is only exposed to macOS over **USB** (48 kHz input), not
+  Bluetooth. USB-C cable works; realme Buds Air7 work too but drop their output to 16 kHz call
+  quality while the mic is open.
+- **Whisper vs. the game (GPU contention is real):**
+
+  | Setup (11s clip, game driving) | Transcribe time | Game impact |
+  |---|---|---|
+  | large-v3-turbo GPU, back-to-back | ~2.0s | 60 → ~40 fps, visible stutter |
+  | base.en GPU, 1 call / 5s | 0.5–0.6s | ~0.5s freeze per call |
+  | base.en CPU (`-ng -t 4`), 1 call / 5s | 1.9–2.1s | none measurable |
+
+  `small.en`/`large-v3-turbo` on CPU are 2–11s, too slow. No model got "Verstappen" from
+  Rohit's real voice ("step in", "tap in"); the F1 vocab prompt fixes "tyres".
+
+**Decisions from Phase 0:**
+
+- Nothing runs on the GPU while on track.
+- **STT primary: cloud streaming (Deepgram or similar).** It transcribes while you talk, so
+  text lands ~0.3s after release instead of ~2s, with zero local load. Rohit is fine paying.
+- **STT fallback: whisper.cpp `base.en`, CPU only, 4 threads, model kept loaded**, with the F1
+  vocab prompt.
+- **Driver names are fuzzy-matched** against the live participants list (packet 4) whatever
+  the STT engine returns.
+- Push-to-talk = DualSense mic-mute via HID; mic = DualSense over USB-C (Buds as wireless
+  fallback).
 
 ### Phase 1 — Telemetry core (1 week)
 
