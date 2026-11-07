@@ -118,7 +118,9 @@ function createChatWindow(): BrowserWindow {
   })
   // Float above a fullscreen game (CrossOver) and follow across Spaces.
   w.setAlwaysOnTop(true, 'screen-saver')
-  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  // skipTransformProcessType: otherwise Electron turns the whole app into an accessory app on
+  // macOS, which drops it from the Dock and Cmd+Tab.
+  w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
   w.loadFile(join(__dirname, 'renderer', 'chat.html'))
   w.on('closed', () => {
     chatWin = null

@@ -16,6 +16,7 @@ import {
   firstNamesFor,
   fixDriverNames,
   fixRadioPhrases,
+  plainSpeech,
 } from '@gp/voice'
 import type { AudioMessage, ChatEvent } from '../ipc.ts'
 
@@ -201,6 +202,7 @@ export class RadioVoice {
 
   private newUtterance(): void {
     this.utt++
+    this.prevSentence = undefined
   }
 
   private endUtterance(): void {
@@ -208,25 +210,35 @@ export class RadioVoice {
     this.speakChain = this.speakChain.then(() => this.d.toAudio({ type: 'end', utt }))
   }
 
+  /** Last sentence sent to TTS in this utterance, for intonation continuity. */
+  private prevSentence: string | undefined
+
   private speak(text: string): void {
     const utt = this.utt
     const signal = this.speakAbort.signal
     const clean = text.replace(/[*_#`]/g, '')
+    const plain = plainSpeech(clean)
+    if (!plain) return
     if (!this.tts) {
       this.speakChain = this.speakChain.then(() => {
-        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean, ...macVoice() })
+        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
       })
       return
     }
     // Start the request now so it's ready when the previous sentence finishes.
-    const audio = this.tts.synth(clean, signal).catch((e: Error) => {
+    // Eleven v3 (audio tags) is opt-in and off track only: ~6s a line is too slow for radio.
+    const expressive =
+      this.d.state.snapshot().status !== 'live' && process.env.GP_TTS_EXPRESSIVE === '1'
+    const previousText = this.prevSentence
+    this.prevSentence = clean
+    const audio = this.tts.synth(clean, signal, { expressive, previousText }).catch((e: Error) => {
       if (!signal.aborted) this.d.log(`[tts] ${e.message}`)
       return null
     })
     this.speakChain = this.speakChain.then(async () => {
       const a = await audio
       if (!a) {
-        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean, ...macVoice() })
+        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
         return
       }
       try {
@@ -234,6 +246,8 @@ export class RadioVoice {
           if (signal.aborted) return
           this.d.toAudio({ type: 'pcm', utt, sampleRate: a.sampleRate, pcm: new Uint8Array(chunk) })
         }
+        // Sentences are synthesised separately; a short breath between them sounds human.
+        if (!signal.aborted) this.d.toAudio({ type: 'gap', utt, ms: 220 })
       } catch (e) {
         if (!signal.aborted) this.d.log(`[tts] ${(e as Error).message}`)
       }

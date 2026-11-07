@@ -92,3 +92,26 @@ describe('radio phrases', () => {
     expect(firstNamesFor(['VERSTAPPEN', 'PÉREZ'])).toEqual(['Max', 'Checo', 'Sergio'])
   })
 })
+
+describe('stripAudioTags', () => {
+  it('removes tags but keeps the words', async () => {
+    const { stripAudioTags } = await import('../src/tts.ts')
+    expect(stripAudioTags('[sighs] Yeah, we can see that. [chuckles]')).toBe(
+      'Yeah, we can see that.',
+    )
+    expect(stripAudioTags('Gap is 1.2 [pause] push now')).toBe('Gap is 1.2 push now')
+  })
+})
+
+describe('plainSpeech', () => {
+  it('strips pause tags and audio tags for display and the Mac voice', async () => {
+    const { plainSpeech, stripBreaks } = await import('../src/tts.ts')
+    expect(
+      plainSpeech(
+        'Copy. <break time="0.4s" /> Gap to Leclerc is one point two... <break time="0.3s"/> push.',
+      ),
+    ).toBe('Copy. Gap to Leclerc is one point two... push.')
+    expect(stripBreaks('[sighs] Yeah <break time="0.5s" />, fine.')).toBe('[sighs] Yeah, fine.')
+    expect(plainSpeech('<break time="0.4s" />')).toBe('')
+  })
+})

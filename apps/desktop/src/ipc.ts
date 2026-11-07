@@ -17,6 +17,8 @@ export type AudioMessage =
   /** No TTS key: speak with the Mac's built-in voice. */
   | { type: 'say'; utt: number; text: string; voice?: string }
   | { type: 'end'; utt: number }
+  /** A breath between sentences. */
+  | { type: 'gap'; utt: number; ms: number }
   /** Stop everything now (driver pressed push-to-talk). */
   | { type: 'stop' }
   | { type: 'beep'; kind: 'open' | 'close' }

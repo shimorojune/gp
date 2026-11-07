@@ -59,6 +59,9 @@ export class RadioPlayer {
           this.openUtt = null
         }
         break
+      case 'gap':
+        if (this.openUtt === m.utt) this.playAt += m.ms / 1000
+        break
       case 'stop':
         this.stop()
         break

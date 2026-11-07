@@ -10,6 +10,18 @@ const log = document.getElementById('log')!
 const form = document.getElementById('form') as HTMLFormElement
 const input = document.getElementById('input') as HTMLInputElement
 const bubbles = new Map<number, HTMLElement>()
+/** Raw streamed text per reply, so a <break /> tag split across deltas still gets hidden. */
+const raw = new Map<number, string>()
+
+/** GP writes pause tags for the voice; hide them (and a half-arrived one) on screen. */
+function display(text: string): string {
+  return text
+    .replace(/<break\b[^>]*\/?>/gi, ' ')
+    .replace(/<[^>]*$/, '')
+    .replace(/\s+([,.!?])/g, '$1')
+    .replace(/ {2,}/g, ' ')
+    .trim()
+}
 let busy = false
 
 function add(cls: string, who: string, text: string): HTMLElement {
@@ -43,13 +55,17 @@ window.gpChat.onEvent((e) => {
         el = add('gp', 'GP', '')
         bubbles.set(e.id, el)
       }
-      el.querySelector('.text')!.textContent += e.text
+      const text = (raw.get(e.id) ?? '') + e.text
+      raw.set(e.id, text)
+      el.querySelector('.text')!.textContent = display(text)
       log.scrollTop = log.scrollHeight
       break
     }
     case 'reply': {
-      const el = bubbles.get(e.id) ?? add('gp', 'GP', e.text)
+      const el = bubbles.get(e.id) ?? add('gp', 'GP', '')
+      el.querySelector('.text')!.textContent = display(e.text)
       bubbles.delete(e.id)
+      raw.delete(e.id)
       const tools = e.tools.length ? ` · ${e.tools.join(', ')}` : ''
       meta(el, `${e.model} · ${e.firstTextMs ?? '-'}ms first words · ${e.totalMs}ms${tools}`)
       busy = false
@@ -58,7 +74,7 @@ window.gpChat.onEvent((e) => {
       break
     }
     case 'radio':
-      add('radio', 'GP RADIO', e.text)
+      add('radio', 'GP RADIO', display(e.text))
       break
     case 'heard':
       meta(add('you', 'YOU (radio)', e.text), `${e.stt} · ${e.sttMs}ms`)
