@@ -16,6 +16,7 @@ export class RadioPlayer {
   private ensure(): AudioContext {
     if (this.ctx) return this.ctx
     const ctx = new AudioContext()
+    ctx.onstatechange = () => console.log(`[audio] context ${ctx.state}`)
     const hp = ctx.createBiquadFilter()
     hp.type = 'highpass'
     hp.frequency.value = 320
@@ -45,6 +46,16 @@ export class RadioPlayer {
   }
 
   handle(m: AudioMessage): void {
+    // macOS can suspend or interrupt the context (output device changes, sleep); a suspended
+    // context accepts buffers silently and never plays them.
+    if (this.ctx && this.ctx.state !== 'running' && m.type !== 'stop') {
+      console.warn(`[audio] context ${this.ctx.state}, resuming`)
+      void this.ctx.resume().catch((e) => console.error(`[audio] resume failed: ${e}`))
+    }
+    if (m.type === 'end')
+      console.log(
+        `[audio] utterance ${m.utt} queued, ends in ${this.ctx ? (this.playAt - this.ctx.currentTime).toFixed(1) : '?'}s`,
+      )
     switch (m.type) {
       case 'pcm':
         this.startUtterance(m.utt)

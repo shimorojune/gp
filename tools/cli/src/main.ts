@@ -19,6 +19,7 @@ import {
   replayRecording,
 } from '@gp/telemetry'
 import {
+  CornerGate,
   DeepgramStt,
   DualSensePtt,
   F1_TERMS,
@@ -45,6 +46,8 @@ const USAGE = `gp <command> [options]
           Talk to the engineer in the terminal, against live telemetry or a recording.
           --until replays up to that many seconds as fast as possible, then freezes there.
           Needs a Claude Code login on this machine (claude /login).
+  gate-test <file.gprec>
+          How often GP would be allowed to talk (on a straight) over a recording.
   ptt-test [--raw]
           Hold the push-to-talk button (L3 by default, GP_PTT_BUTTON=l3|r3|mute), talk, release: prints what was heard and how
           long transcription took. --raw prints which HID report bytes change instead.
@@ -92,6 +95,9 @@ switch (command) {
     break
   case 'ptt-test':
     await pttTest()
+    break
+  case 'gate-test':
+    await gateTest()
     break
   default:
     process.stdout.write(USAGE)
@@ -477,4 +483,44 @@ async function pttTest(): Promise<void> {
   await new Promise<void>((done) => process.once('SIGINT', () => done()))
   ptt.stop()
   mic.stop()
+}
+
+async function gateTest(): Promise<void> {
+  const path = process.argv[3]
+  if (!path) throw new Error('usage: gate-test <file.gprec>')
+  let clock = 0
+  const state = new RaceState({ now: () => clock })
+  const gate = new CornerGate({ now: () => clock })
+  let lastSample = 0
+  let driving = 0
+  let open = 0
+  let windowStart: number | null = null
+  const windows: number[] = []
+  for await (const pkt of readRecording(path)) {
+    clock = pkt.t
+    const res = parsePacket(pkt.buf)
+    if (!res.ok) continue
+    state.ingest(res.packet)
+    if (clock - lastSample < 50) continue
+    lastSample = clock
+    const inputs = state.playerInputs()
+    if (!inputs || inputs.speedKph < 50) continue
+    driving += 50
+    const ok = gate.update(inputs)
+    if (ok) {
+      open += 50
+      windowStart ??= clock
+    } else if (windowStart !== null) {
+      windows.push(clock - windowStart)
+      windowStart = null
+    }
+  }
+  const pct = driving ? ((open / driving) * 100).toFixed(1) : '0'
+  const long = windows.filter((w) => w >= 2000).length
+  const top = [...windows]
+    .sort((a, b) => b - a)
+    .slice(0, 5)
+    .map((w) => `${(w / 1000).toFixed(1)}s`)
+  console.log(`driving ${(driving / 1000).toFixed(0)}s, clear to talk ${pct}%`)
+  console.log(`${windows.length} windows, ${long} of 2s+, longest ${top.join(' ')}`)
 }

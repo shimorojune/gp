@@ -276,31 +276,65 @@ export class RadioVoice {
       this.d.state.snapshot().status !== 'live' && process.env.GP_TTS_EXPRESSIVE === '1'
     const previousText = this.prevSentence
     this.prevSentence = clean
-    const audio = this.tts.synth(clean, signal, { expressive, previousText }).catch((e: Error) => {
-      if (!signal.aborted) this.d.log(`[tts] ${e.message}`)
-      return null
-    })
+    // Each sentence gets its own abort, tied to the cut-off signal, so a stalled ElevenLabs
+    // stream can be dropped without wedging everything queued behind it.
+    const own = new AbortController()
+    const cut = () => own.abort()
+    signal.addEventListener('abort', cut, { once: true })
+    const t0 = performance.now()
+    const short = plain.length > 40 ? `${plain.slice(0, 40)}...` : plain
+    const audio = this.tts
+      .synth(clean, own.signal, { expressive, previousText })
+      .catch((e: Error) => {
+        if (!own.signal.aborted) this.d.log(`[tts] error: ${e.message}`)
+        return null
+      })
     this.speakChain = this.speakChain.then(async () => {
-      if (!(await gate())) return
-      const a = await audio
-      if (!a) {
-        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
+      const held = performance.now()
+      if (!(await gate())) {
+        own.abort()
+        if (!signal.aborted) this.d.log(`[gate] dropped, no straight in time: "${short}"`)
         return
       }
+      const waited = Math.round(performance.now() - held)
+      if (waited > 100) this.d.log(`[gate] held ${waited}ms for a straight`)
+      // Worst case for one sentence: ~0.1s per character of speech plus slack.
+      const limitMs = 8000 + plain.length * 100
+      const timer = setTimeout(() => {
+        this.d.log(`[tts] timeout after ${limitMs}ms, skipping: "${short}"`)
+        own.abort()
+      }, limitMs)
       try {
+        const a = await audio
+        if (!a) {
+          if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
+          return
+        }
+        let first = true
+        let bytes = 0
         for await (const chunk of a.chunks) {
-          if (signal.aborted) return
+          if (own.signal.aborted) return
+          if (first) {
+            first = false
+            this.d.log(`[tts] first audio ${Math.round(performance.now() - t0)}ms: "${short}"`)
+          }
+          bytes += chunk.length
           this.d.toAudio({ type: 'pcm', utt, sampleRate: a.sampleRate, pcm: new Uint8Array(chunk) })
         }
+        if (!bytes) this.d.log(`[tts] no audio returned: "${short}"`)
         // Sentences are synthesised separately; a short breath between them sounds human.
-        if (!signal.aborted) this.d.toAudio({ type: 'gap', utt, ms: 220 })
+        if (!own.signal.aborted) this.d.toAudio({ type: 'gap', utt, ms: 220 })
       } catch (e) {
-        if (!signal.aborted) this.d.log(`[tts] ${(e as Error).message}`)
+        if (!own.signal.aborted) this.d.log(`[tts] ${(e as Error).message}`)
+      } finally {
+        clearTimeout(timer)
+        signal.removeEventListener('abort', cut)
       }
     })
   }
 
   private stopSpeaking(): void {
+    this.d.log('[voice] cut off')
     this.speakAbort.abort()
     this.speakAbort = new AbortController()
     this.speakChain = Promise.resolve()

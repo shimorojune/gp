@@ -67,7 +67,8 @@ listener.on('raw', ({ buf, at }) => {
   writer?.write(buf, at)
 })
 state.on('sessionStarted', () => {
-  if (!writer || !autoRecord) return
+  // The first packets of the app run start a file and a session at the same moment.
+  if (!writer || !autoRecord || writer.count < 100) return
   void writer.close()
   writer = null
   startRecording()
@@ -115,6 +116,13 @@ function createWindow(): void {
     },
   })
   win.loadFile(join(__dirname, 'renderer', 'index.html'))
+  // The dashboard plays GP's voice; get its console and crashes into the app log.
+  win.webContents.on('console-message', (e) => {
+    if (e.level !== 'debug') console.log(`[renderer] ${e.message}`)
+  })
+  win.webContents.on('render-process-gone', (_e, d) =>
+    console.error(`[renderer] gone: ${d.reason}`),
+  )
   win.on('closed', () => {
     win = null
     // The hidden overlay would otherwise keep the app alive.

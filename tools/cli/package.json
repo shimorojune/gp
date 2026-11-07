@@ -14,7 +14,8 @@
     "typecheck": "tsc -p .",
     "test": "vitest run --passWithNoTests",
     "chat": "tsx src/main.ts chat",
-    "ptt-test": "tsx src/main.ts ptt-test"
+    "ptt-test": "tsx src/main.ts ptt-test",
+    "gate-test": "tsx src/main.ts gate-test"
   },
   "dependencies": {
     "@gp/shared": "workspace:*",

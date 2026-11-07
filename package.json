@@ -16,7 +16,8 @@
     "inspect": "pnpm --filter @gp/cli inspect",
     "desktop": "pnpm --filter @gp/desktop dev",
     "chat": "pnpm --filter @gp/cli chat",
-    "ptt-test": "pnpm --filter @gp/cli ptt-test"
+    "ptt-test": "pnpm --filter @gp/cli ptt-test",
+    "gate-test": "pnpm --filter @gp/cli gate-test"
   },
   "devDependencies": {
     "@biomejs/biome": "^1.9.4",
