@@ -246,7 +246,12 @@ async function chat(): Promise<void> {
   })
 
   const rl = createInterface({ input: process.stdin, output: process.stdout, prompt: 'you> ' })
+  let rlClosed = false
+  rl.on('close', () => {
+    rlClosed = true
+  })
   const say = (line: string) => {
+    if (rlClosed) return
     // Print above the prompt without clobbering what the driver is typing.
     process.stdout.write(`\r\x1b[2K${line}\n`)
     rl.prompt(true)
@@ -267,8 +272,9 @@ async function chat(): Promise<void> {
   })
   engineer.on('error', (e) => say(`engineer error: ${e.message}`))
 
+  let stopRadio: (() => void) | null = null
   if (!values['no-radio']) {
-    attachRadio(state, engineer, {
+    stopRadio = attachRadio(state, engineer, {
       onCall: (r) =>
         say(`\x1b[36mGP (radio)>\x1b[0m ${r.text}  \x1b[2m(${r.model}, ${r.totalMs}ms)\x1b[0m`),
     })
@@ -361,10 +367,11 @@ async function chat(): Promise<void> {
       .finally(() => {
         busy = false
         streaming = false
-        rl.prompt()
+        if (!rlClosed) rl.prompt()
       })
   }
   ac.abort()
+  stopRadio?.()
   rl.close()
   await listener?.stop()
   await engineer.close()
