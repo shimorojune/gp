@@ -66,6 +66,8 @@ export class RadioVoice {
   /** True on a straight, or whenever he isn't driving. */
   private clearToTalk = true
   private gateTimer: ReturnType<typeof setInterval> | null = null
+  /** Utterance number of an answer to the driver that is still queued or playing. */
+  private answering: number | null = null
 
   constructor(private readonly d: VoiceDeps) {
     this.fallbackStt = new WhisperStt()
@@ -106,6 +108,7 @@ export class RadioVoice {
         sp = new SentenceSplitter()
         this.splitters.set(id, sp)
         this.newUtterance()
+        this.answering = this.utt
       }
       for (const sentence of sp.push(text)) this.speak(sentence)
     })
@@ -123,7 +126,12 @@ export class RadioVoice {
   radioCall(text: string, urgent = false): void {
     // Don't talk over the driver while he's holding the button.
     if (this.stream) return
-    // Newest news wins: cut whatever he was still saying.
+    // His own question comes first: a routine call never cuts off the answer.
+    if (this.answering !== null && !urgent) {
+      this.d.log('[voice] radio call skipped, still answering the driver')
+      return
+    }
+    // Otherwise newest news wins: cut whatever older call was still going.
     this.stopSpeaking()
     this.newUtterance()
     this.speak(text, { urgent, dropIfLate: !urgent })
@@ -132,7 +140,7 @@ export class RadioVoice {
 
   /** The race order changed: anything still being said is about the old situation. */
   positionChanged(): void {
-    if (this.stream) return
+    if (this.stream || this.answering !== null) return
     this.stopSpeaking()
   }
 
@@ -234,7 +242,10 @@ export class RadioVoice {
 
   private endUtterance(): void {
     const utt = this.utt
-    this.speakChain = this.speakChain.then(() => this.d.toAudio({ type: 'end', utt }))
+    this.speakChain = this.speakChain.then(() => {
+      this.d.toAudio({ type: 'end', utt })
+      if (this.answering === utt) this.answering = null
+    })
   }
 
   /** Last sentence sent to TTS in this utterance, for intonation continuity. */
@@ -283,12 +294,12 @@ export class RadioVoice {
     signal.addEventListener('abort', cut, { once: true })
     const t0 = performance.now()
     const short = plain.length > 40 ? `${plain.slice(0, 40)}...` : plain
-    const audio = this.tts
-      .synth(clean, own.signal, { expressive, previousText })
-      .catch((e: Error) => {
+    const synth = () =>
+      this.tts!.synth(clean, own.signal, { expressive, previousText }).catch((e: Error) => {
         if (!own.signal.aborted) this.d.log(`[tts] error: ${e.message}`)
         return null
       })
+    const audio = synth()
     this.speakChain = this.speakChain.then(async () => {
       const held = performance.now()
       if (!(await gate())) {
@@ -305,25 +316,34 @@ export class RadioVoice {
         own.abort()
       }, limitMs)
       try {
-        const a = await audio
-        if (!a) {
-          if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
-          return
-        }
-        let first = true
-        let bytes = 0
-        for await (const chunk of a.chunks) {
-          if (own.signal.aborted) return
-          if (first) {
-            first = false
-            this.d.log(`[tts] first audio ${Math.round(performance.now() - t0)}ms: "${short}"`)
+        // One retry if ElevenLabs hands back an empty stream, then the Mac voice.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const a = await (attempt === 0 ? audio : synth())
+          if (!a) break
+          let bytes = 0
+          for await (const chunk of a.chunks) {
+            if (own.signal.aborted) return
+            if (!bytes)
+              this.d.log(`[tts] first audio ${Math.round(performance.now() - t0)}ms: "${short}"`)
+            bytes += chunk.length
+            this.d.toAudio({
+              type: 'pcm',
+              utt,
+              sampleRate: a.sampleRate,
+              pcm: new Uint8Array(chunk),
+            })
           }
-          bytes += chunk.length
-          this.d.toAudio({ type: 'pcm', utt, sampleRate: a.sampleRate, pcm: new Uint8Array(chunk) })
+          if (own.signal.aborted) return
+          if (bytes) {
+            // Sentences are synthesised separately; a short breath between them sounds human.
+            this.d.toAudio({ type: 'gap', utt, ms: 220 })
+            return
+          }
+          this.d.log(
+            `[tts] empty audio (status ${a.meta?.status}, request ${a.meta?.requestId ?? '?'}, attempt ${attempt + 1}): "${short}"`,
+          )
         }
-        if (!bytes) this.d.log(`[tts] no audio returned: "${short}"`)
-        // Sentences are synthesised separately; a short breath between them sounds human.
-        if (!own.signal.aborted) this.d.toAudio({ type: 'gap', utt, ms: 220 })
+        if (!own.signal.aborted) this.d.toAudio({ type: 'say', utt, text: plain, ...macVoice() })
       } catch (e) {
         if (!own.signal.aborted) this.d.log(`[tts] ${(e as Error).message}`)
       } finally {
@@ -338,6 +358,7 @@ export class RadioVoice {
     this.speakAbort.abort()
     this.speakAbort = new AbortController()
     this.speakChain = Promise.resolve()
+    this.answering = null
     this.splitters.clear()
     this.mutedThrough = this.lastAskId
     this.d.toAudio({ type: 'stop' })

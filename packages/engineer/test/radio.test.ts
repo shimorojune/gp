@@ -1,7 +1,7 @@
 import { TypedEmitter } from '@gp/shared'
 import type { RaceState } from '@gp/telemetry'
 import { describe, expect, it } from 'vitest'
-import { attachRadio } from '../src/radio.ts'
+import { attachRadio, trimCall } from '../src/radio.ts'
 import type { EngineerSession, Reply } from '../src/session.ts'
 
 class FakeState extends TypedEmitter<Record<string, unknown>> {
@@ -102,7 +102,7 @@ describe('attachRadio', () => {
     })
     await tick(80)
     expect(sent).toHaveLength(2)
-    expect(sent[1]).toBe('Lap 2 done: 1:14.000, P7. Lap 3 done: 1:13.900 (invalid), P7.')
+    expect(sent[1]).toBe('Lap 2 done: 1:14.0, P7. Lap 3 done: 1:13.9 (invalid), P7.')
     stop()
   })
 
@@ -176,5 +176,18 @@ describe('attachRadio penalties', () => {
       'Penalty: time penalty (3s) for multiple warnings. Stop-go penalty served.',
     ])
     stop()
+  })
+})
+
+describe('trimCall', () => {
+  it('keeps at most two sentences, pause tags included', () => {
+    expect(
+      trimCall(
+        'Good lap. <break time="0.3s" /> One thirteen four. Stroll is two tenths up the road. Keep going.',
+      ),
+    ).toBe('Good lap. <break time="0.3s" /> One thirteen four.')
+    expect(trimCall('Sainz ahead now... three tenths. Go.')).toBe(
+      'Sainz ahead now... three tenths. Go.',
+    )
   })
 })

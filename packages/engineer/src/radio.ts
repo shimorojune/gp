@@ -73,7 +73,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
         // The order changed while he was thinking: this call is about the old race. The
         // change is queued, so the next check covers it.
         if (version !== positionVersion && !urgent) return
-        if (!isSilent(r.text)) opts.onCall?.(r, { urgent })
+        if (!isSilent(r.text)) opts.onCall?.({ ...r, text: trimCall(r.text) }, { urgent })
       })
       .catch(() => {})
       .finally(() => {
@@ -162,8 +162,9 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const offLap = state.on('lapCompleted', (l) => {
     if (!l.isPlayer) return
+    // Rounded to the tenth here: given milliseconds, the model reads them all out.
     push(
-      `Lap ${l.lapNumber} done: ${formatLapTime(l.lapTimeMs)}${l.valid ? '' : ' (invalid)'}, P${l.position}.`,
+      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}.`,
     )
   })
 
@@ -202,6 +203,25 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     offLap()
     offEvent()
   }
+}
+
+/**
+ * Automatic calls are one fact and maybe an instruction. The model still runs long now and
+ * then, so keep the first two sentences and stop there.
+ */
+export function trimCall(text: string, maxSentences = 2): string {
+  // An ellipsis is a beat, not the end of a sentence.
+  const parts = text
+    .trim()
+    .replace(/\.\.\./g, '\u2026')
+    .match(/[^.!?]+(?:[.!?]+(?:\s*<break[^>]*\/>)?|$)/g)
+  if (!parts || parts.length <= maxSentences) return text.trim()
+  return parts
+    .slice(0, maxSentences)
+    .join('')
+    .replace(/\s*<break[^>]*\/>\s*$/, '')
+    .replace(/\u2026/g, '...')
+    .trim()
 }
 
 export function isSilent(text: string): boolean {

@@ -2,6 +2,10 @@ export interface TtsAudio {
   sampleRate: number
   /** Raw s16le mono PCM chunks as they stream in. */
   chunks: AsyncIterable<Buffer>
+  /** For logging when something goes wrong. */
+  meta?: { status: number; requestId?: string | undefined }
+  /** Kept only so it isn't garbage-collected mid-stream. */
+  response?: unknown
 }
 
 export interface Tts {
@@ -101,17 +105,51 @@ export class ElevenLabsTts implements Tts {
     if (!res.ok || !res.body)
       throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const body = res.body as unknown as AsyncIterable<Uint8Array>
+    // Read the stream right away, even while playback waits for a straight. Node's fetch
+    // cancels the body of a Response that gets garbage-collected before it's read, and the
+    // stream then just ends empty: that was the silence after the first radio call.
+    const parts: Buffer[] = []
+    let done = false
+    let failure: Error | null = null
+    let wake = null as (() => void) | null
+    const meta = { status: res.status, requestId: res.headers.get('request-id') ?? undefined }
+    void (async () => {
+      try {
+        for await (const part of body) {
+          parts.push(Buffer.from(part as Uint8Array))
+          wake?.()
+        }
+      } catch (e) {
+        failure = e instanceof Error ? e : new Error(String(e))
+      } finally {
+        done = true
+        wake?.()
+      }
+    })()
     return {
       sampleRate: this.sampleRate,
+      meta,
+      // Hold the Response itself until playback is done (see above).
+      response: res,
       chunks: (async function* () {
         // PCM samples are 2 bytes; keep chunk boundaries on whole samples.
         let carry: Buffer = Buffer.alloc(0)
-        for await (const part of body) {
-          const b: Buffer = Buffer.concat([carry, Buffer.from(part as Uint8Array)])
+        while (true) {
+          const part = parts.shift()
+          if (!part) {
+            if (done) break
+            await new Promise<void>((r) => {
+              wake = r
+            })
+            wake = null
+            continue
+          }
+          const b: Buffer = Buffer.concat([carry, part])
           const even = b.length - (b.length % 2)
           carry = b.subarray(even)
           if (even) yield b.subarray(0, even)
         }
+        if (failure) throw failure
       })(),
     }
   }
