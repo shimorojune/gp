@@ -6,3 +6,4 @@ onlyBuiltDependencies:
   - electron
   - esbuild
   - "@biomejs/biome"
+  - node-hid

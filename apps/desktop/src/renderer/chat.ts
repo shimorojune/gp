@@ -60,6 +60,12 @@ window.gpChat.onEvent((e) => {
     case 'radio':
       add('radio', 'GP RADIO', e.text)
       break
+    case 'heard':
+      meta(add('you', 'YOU (radio)', e.text), `${e.stt} · ${e.sttMs}ms`)
+      break
+    case 'voice':
+      meta(add('you', '', ''), e.status)
+      break
     case 'error':
       add('err', 'ERROR', e.message)
       busy = false

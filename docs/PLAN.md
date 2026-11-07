@@ -499,7 +499,19 @@ Original scope:
 - **Ship:** type "how did that stint compare to the last one?" between sessions or while
   paused and get grounded answers.
 
-### Phase 3 — Voice (1 week)
+### Phase 3 — Voice (1 week) — **built 2026-11-07, testing on the Mac**
+
+Built: `packages/voice` and `apps/desktop/src/main/voice.ts`. Hold the DualSense mic-mute
+button (HID, non-exclusive), talk, release. Mic is ffmpeg avfoundation, always warm with a
+250ms pre-roll. STT is Deepgram nova-3 streaming with driver names as keyterms when
+`DEEPGRAM_API_KEY` is set, otherwise whisper base.en on CPU from `~/Documents/GP/models`;
+misheard names are snapped to the grid. TTS is ElevenLabs Flash v2.5 streamed sentence by
+sentence (`ELEVENLABS_API_KEY`, voice `GP_VOICE_ID`), otherwise the Mac voice. Radio effect
+and squelch in Web Audio. Pressing the button cuts GP off. Keys live only in
+`~/Documents/GP/.env`. Cmd+Shift+T is a keyboard fallback. `pnpm ptt-test` checks PTT + STT
+alone. `GP_LIVE_MODEL=haiku` makes on-track questions use Haiku if Sonnet is too slow.
+
+Original scope:
 
 - Push-to-talk capture, whisper.cpp STT with vocabulary prompt.
 - Streaming TTS by sentence, radio effect, interrupt (press PTT again to cut him off).

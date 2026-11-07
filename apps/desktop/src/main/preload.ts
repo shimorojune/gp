@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import {
+  type AudioMessage,
   type ChatBridge,
   type ChatEvent,
   type GpBridge,
@@ -13,6 +14,9 @@ const bridge: GpBridge = {
   },
   toggleRecording: () => ipcRenderer.invoke(IPC.toggleRecording),
   toggleOnTop: () => ipcRenderer.invoke(IPC.toggleOnTop),
+  onAudio(cb) {
+    ipcRenderer.on(IPC.audio, (_e, m: AudioMessage) => cb(m))
+  },
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)

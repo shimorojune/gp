@@ -134,8 +134,17 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
   }
 
   /** Ask the engineer something. The current race status is prepended automatically. */
-  ask(text: string): Promise<Reply> {
-    return this.send(`${statusTag(this.opts.snapshot())} ${text}`, this.chatModel, 'ask')
+  ask(text: string, opts: { model?: string } = {}): Promise<Reply> {
+    return this.send(
+      `${statusTag(this.opts.snapshot())} ${text}`,
+      opts.model ?? this.chatModel,
+      'ask',
+    )
+  }
+
+  /** True while a reply is being generated or queued. */
+  get busy(): boolean {
+    return this.pending.length > 0
   }
 
   private get chatModel(): string {

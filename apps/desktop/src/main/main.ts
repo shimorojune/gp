@@ -1,16 +1,27 @@
 import { mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
+import { gpHome, loadDotEnv } from '@gp/voice'
 import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
-import { type ChatEvent, IPC, type RecordingState, type SnapshotMessage } from '../ipc.ts'
+import {
+  type AudioMessage,
+  type ChatEvent,
+  IPC,
+  type RecordingState,
+  type SnapshotMessage,
+} from '../ipc.ts'
+import { RadioVoice } from './voice.ts'
 
 const PORT = Number(process.env.GP_UDP_PORT ?? DEFAULT_PORT)
-const GP_HOME = process.env.GP_HOME ?? join(homedir(), 'Documents', 'GP')
+const GP_HOME = gpHome()
+// API keys (Deepgram, ElevenLabs) live in ~/Documents/GP/.env, nowhere else.
+const envFile = loadDotEnv(GP_HOME)
 const RECORDINGS_DIR = process.env.GP_RECORDINGS_DIR ?? join(GP_HOME, 'recordings')
-/** Toggles the chat overlay. Phase 3 adds the DualSense mic button for voice. */
+/** Toggles the chat overlay. */
 const CHAT_HOTKEY = process.env.GP_CHAT_HOTKEY ?? 'CommandOrControl+Shift+G'
+/** Keyboard push-to-talk fallback (press to talk, press again to send). Main PTT is the DualSense mute button. */
+const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
 
 const listener = new TelemetryListener({ port: PORT })
 const state = new RaceState()
@@ -29,6 +40,8 @@ const engineer = new EngineerSession({
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
 })
 const toChat = (e: ChatEvent) => chatWin?.webContents.send(IPC.chatEvent, e)
+const toAudio = (m: AudioMessage) => win?.webContents.send(IPC.audio, m)
+const voice = new RadioVoice({ engineer, state, toAudio, toChat, log: (l) => console.log(l) })
 engineer.on('delta', ({ id, kind, text }) => {
   if (kind === 'ask') toChat({ type: 'delta', id, text })
 })
@@ -36,6 +49,7 @@ engineer.on('error', (e) => toChat({ type: 'error', message: e.message }))
 attachRadio(state, engineer, {
   onCall: (r) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
+    voice.radioCall(r.text)
     console.log(`[radio] ${r.text}`)
   },
 })
@@ -73,6 +87,8 @@ function createWindow(): void {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       sandbox: true,
+      // This window plays GP's voice; keep audio timing tight when it's in the background.
+      backgroundThrottling: false,
     },
   })
   win.loadFile(join(__dirname, 'renderer', 'index.html'))
@@ -140,6 +156,11 @@ app.whenReady().then(async () => {
   if (!globalShortcut.register(CHAT_HOTKEY, toggleChat))
     console.error(`[chat] could not register hotkey ${CHAT_HOTKEY}`)
   else console.log(`[chat] ${CHAT_HOTKEY} toggles the GP radio overlay`)
+  if (globalShortcut.register(TALK_HOTKEY, () => voice.toggleTalk()))
+    console.log(`[voice] ${TALK_HOTKEY} = push-to-talk fallback (press, talk, press again)`)
+  console.log(
+    `[env] ${envFile ?? `no ${join(GP_HOME, '.env')} (no API keys: whisper + Mac voice)`}`,
+  )
 
   ipcMain.handle(IPC.toggleRecording, () => toggleRecording())
   ipcMain.handle(IPC.toggleOnTop, () => {
@@ -154,6 +175,7 @@ app.whenReady().then(async () => {
   // Pre-create the overlay (hidden) and warm the engineer so the first answer is quick.
   chatWin = createChatWindow()
   engineer.start()
+  voice.start()
 
   // 10 Hz is plenty for a dashboard; the store itself ingests at full rate.
   setInterval(() => {
@@ -173,7 +195,10 @@ app.whenReady().then(async () => {
   }, 100)
 })
 
-app.on('will-quit', () => globalShortcut.unregisterAll())
+app.on('will-quit', () => {
+  globalShortcut.unregisterAll()
+  voice.stop()
+})
 
 app.on('window-all-closed', async () => {
   await engineer.close().catch(() => {})

@@ -1,5 +1,6 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
 import type { GpBridge, SnapshotMessage } from '../ipc.ts'
+import { RadioPlayer } from './audio.ts'
 
 declare global {
   interface Window {
@@ -96,3 +97,6 @@ $('ontop').addEventListener('click', async () => {
   const on = await window.gp.toggleOnTop()
   $('ontop').classList.toggle('on', on)
 })
+
+const player = new RadioPlayer()
+window.gp.onAudio((m) => player.handle(m))

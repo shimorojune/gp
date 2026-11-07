@@ -18,6 +18,17 @@ import {
   readRecordingMeta,
   replayRecording,
 } from '@gp/telemetry'
+import {
+  DeepgramStt,
+  DualSensePtt,
+  F1_TERMS,
+  Mic,
+  WhisperStt,
+  fixDriverNames,
+  gpHome,
+  loadDotEnv,
+} from '@gp/voice'
+import HID from 'node-hid'
 
 const USAGE = `gp <command> [options]
 
@@ -34,6 +45,9 @@ const USAGE = `gp <command> [options]
           Talk to the engineer in the terminal, against live telemetry or a recording.
           --until replays up to that many seconds as fast as possible, then freezes there.
           Needs a Claude Code login on this machine (claude /login).
+  ptt-test [--raw]
+          Hold the DualSense mic-mute button, talk, release: prints what was heard and how
+          long transcription took. --raw prints which HID report bytes change instead.
 `
 
 // pnpm runs scripts from the package dir; resolve user paths against where they ran pnpm.
@@ -55,6 +69,7 @@ const { values, positionals } = parseArgs({
     model: { type: 'string' },
     'check-model': { type: 'string' },
     'no-radio': { type: 'boolean' },
+    raw: { type: 'boolean' },
   },
 })
 const port = values.port ? Number(values.port) : DEFAULT_PORT
@@ -74,6 +89,9 @@ switch (command) {
     break
   case 'chat':
     await chat()
+    break
+  case 'ptt-test':
+    await pttTest()
     break
   default:
     process.stdout.write(USAGE)
@@ -376,4 +394,87 @@ async function chat(): Promise<void> {
   await listener?.stop()
   await engineer.close()
   process.exit(0)
+}
+
+async function pttTest(): Promise<void> {
+  if (values.raw) {
+    const info = HID.devices().find((d) => d.vendorId === 0x054c && d.path)
+    if (!info?.path) throw new Error('no DualSense found')
+    console.log(
+      `${info.product} ${info.path}. Press buttons; changed bytes are printed. Ctrl+C to stop.`,
+    )
+    const dev = new HID.HID(info.path, { nonExclusive: true })
+    let prev: Buffer | null = null
+    dev.on('data', (d: Buffer) => {
+      // Skip sticks/triggers/motion: only print bytes 8-11 (buttons on USB and Bluetooth).
+      if (prev)
+        for (let i = 8; i <= 11; i++)
+          if (d[i] !== prev[i])
+            console.log(
+              `report 0x${d[0]!.toString(16)} len ${d.length} byte ${i}: 0x${prev[i]!.toString(16)} -> 0x${d[i]!.toString(16)}`,
+            )
+      prev = Buffer.from(d)
+    })
+    await new Promise<void>((done) => process.once('SIGINT', () => done()))
+    dev.close()
+    return
+  }
+  const env = loadDotEnv()
+  console.log(env ? `keys from ${env}` : `no ${join(gpHome(), '.env')}, using local whisper`)
+  const whisper = new WhisperStt()
+  const stt = process.env.DEEPGRAM_API_KEY ? new DeepgramStt(process.env.DEEPGRAM_API_KEY) : whisper
+  if (stt === whisper && !whisper.available)
+    console.log('whisper model missing: put ggml-base.en.bin in ~/Documents/GP/models')
+  const grid = [
+    'VERSTAPPEN',
+    'PÉREZ',
+    'HAMILTON',
+    'RUSSELL',
+    'LECLERC',
+    'SAINZ',
+    'NORRIS',
+    'PIASTRI',
+    'ALONSO',
+    'STROLL',
+    'GASLY',
+    'OCON',
+    'ALBON',
+    'SARGEANT',
+    'TSUNODA',
+    'DE VRIES',
+    'BOTTAS',
+    'ZHOU',
+    'MAGNUSSEN',
+    'HÜLKENBERG',
+  ]
+  const mic = new Mic()
+  mic.on('error', (e) => console.error(`mic: ${e.message}`))
+  mic.start()
+  const ptt = new DualSensePtt()
+  ptt.on('connected', ({ transport }) => console.log(`controller connected (${transport})`))
+  ptt.on('error', (e) => console.error(`ptt: ${e.message}`))
+  let stream: ReturnType<typeof stt.open> | null = null
+  ptt.on('down', () => {
+    process.stdout.write('[talking] ')
+    stream = stt.open([...grid, ...F1_TERMS])
+    const s = stream
+    mic.begin((pcm) => s.write(pcm))
+  })
+  ptt.on('up', async () => {
+    const s = stream
+    stream = null
+    if (!s) return
+    const pcm = mic.end()
+    const t0 = performance.now()
+    const raw = await s.finish().catch((e: Error) => `(error: ${e.message})`)
+    const ms = Math.round(performance.now() - t0)
+    console.log(`${stt.name}, ${(pcm.length / 32000).toFixed(1)}s audio, ${ms}ms after release`)
+    console.log(`  heard: "${raw}"`)
+    console.log(`  fixed: "${fixDriverNames(raw, grid)}"`)
+  })
+  ptt.start()
+  console.log(`stt: ${stt.name}. Hold mic-mute on the DualSense and talk. Ctrl+C to stop.`)
+  await new Promise<void>((done) => process.once('SIGINT', () => done()))
+  ptt.stop()
+  mic.stop()
 }

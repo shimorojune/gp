@@ -38,6 +38,12 @@ importers:
       '@gp/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@gp/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
+      node-hid:
+        specifier: ^3.1.2
+        version: 3.4.0
     devDependencies:
       electron:
         specifier: 45.0.0
@@ -69,6 +75,15 @@ importers:
         specifier: workspace:*
         version: link:../shared
 
+  packages/voice:
+    dependencies:
+      '@gp/shared':
+        specifier: workspace:*
+        version: link:../shared
+      node-hid:
+        specifier: ^3.1.2
+        version: 3.4.0
+
   tools/cli:
     dependencies:
       '@gp/engineer':
@@ -80,6 +95,12 @@ importers:
       '@gp/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@gp/voice':
+        specifier: workspace:*
+        version: link:../../packages/voice
+      node-hid:
+        specifier: ^3.1.2
+        version: 3.4.0
     devDependencies:
       tsx:
         specifier: ^4.19.2
@@ -1183,6 +1204,15 @@ packages:
     resolution: {integrity: sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg==}
     engines: {node: '>=18'}
 
+  node-addon-api@8.9.2:
+    resolution: {integrity: sha512-VijLXbi3UACN69I0JVXJsX4tjACjNoQDgv2gTF6sx2wWEi8tkSg2eX8p5gSIFi8z2+DL3oHmY6OyKce38SDolg==}
+    engines: {node: ^18 || ^20 || >= 21}
+
+  node-hid@3.4.0:
+    resolution: {integrity: sha512-Br7EO3bJARAJBdtcsGzF/Vs5TjfbkaMdglqLQ+Rk9GOGgVqv5DxYUVH5znLerJU+OfBWw8sd552Ujcprz1bG9g==}
+    engines: {node: '>=10.16'}
+    hasBin: true
+
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
     engines: {node: '>=0.10.0'}
@@ -1222,6 +1252,11 @@ packages:
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
+
+  pkg-prebuilds@1.1.0:
+    resolution: {integrity: sha512-jyai+KTQ2OwbN6iRYw88XbYOMgtpoSYJpjYebx7d9ihqz3txNi3ucsBt3va0iVWe6svSlaqpijMHFF/eJCMZzg==}
+    engines: {node: '>= 14.15.0'}
+    hasBin: true
 
   postcss@8.5.32:
     resolution: {integrity: sha512-LJlKCCAUFKOuZxipUdYw1NzIITEsPcgyOG9LkvRJvuKj/bRzbuRY0ARXvL0pWGpsZvn8jku+LMep2eU0seHp8g==}
@@ -2341,6 +2376,13 @@ snapshots:
     dependencies:
       content-type: 2.1.0
 
+  node-addon-api@8.9.2: {}
+
+  node-hid@3.4.0:
+    dependencies:
+      node-addon-api: 8.9.2
+      pkg-prebuilds: 1.1.0
+
   object-assign@4.1.1: {}
 
   object-inspect@1.13.4: {}
@@ -2366,6 +2408,8 @@ snapshots:
   picocolors@1.1.1: {}
 
   pkce-challenge@5.0.1: {}
+
+  pkg-prebuilds@1.1.0: {}
 
   postcss@8.5.32:
     dependencies:

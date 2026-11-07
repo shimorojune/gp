@@ -6,3 +6,4 @@ out/
 recordings/*.gprec
 !recordings/.gitkeep
 .DS_Store
+.env

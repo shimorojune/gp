@@ -12,7 +12,7 @@ await Promise.all([
     platform: 'node',
     format: 'cjs',
     // The SDK locates its native Claude Code binary relative to its own package; don't bundle it.
-    external: ['electron', '@anthropic-ai/claude-agent-sdk'],
+    external: ['electron', '@anthropic-ai/claude-agent-sdk', 'node-hid'],
   }),
   build({
     ...common,

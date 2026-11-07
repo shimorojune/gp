@@ -13,12 +13,15 @@
     "live": "tsx src/main.ts live",
     "typecheck": "tsc -p .",
     "test": "vitest run --passWithNoTests",
-    "chat": "tsx src/main.ts chat"
+    "chat": "tsx src/main.ts chat",
+    "ptt-test": "tsx src/main.ts ptt-test"
   },
   "dependencies": {
     "@gp/shared": "workspace:*",
     "@gp/telemetry": "workspace:*",
-    "@gp/engineer": "workspace:*"
+    "@gp/engineer": "workspace:*",
+    "@gp/voice": "workspace:*",
+    "node-hid": "^3.1.2"
   },
   "devDependencies": {
     "tsx": "^4.19.2"
