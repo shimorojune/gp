@@ -7,6 +7,7 @@ import { formatDelta, formatLapTime } from '@gp/shared'
 import {
   ACTUAL_COMPOUNDS,
   type CarSnapshot,
+  PIT_STATUS,
   type RaceSnapshot,
   TEAMS,
   VISUAL_COMPOUNDS,
@@ -82,6 +83,8 @@ export function raceSnapshotView(s: RaceSnapshot) {
         }
       : null,
     pitStops: me?.numPitStops ?? null,
+    // 'Pitting' = in the pit lane now, 'In pit area' = in the box.
+    pitLane: me && me.pitStatus > 0 ? (PIT_STATUS[me.pitStatus] ?? 'Pitting') : null,
     penalties: me
       ? {
           unservedTimeSec: me.penaltiesSec,
