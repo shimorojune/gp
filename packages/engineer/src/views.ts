@@ -20,6 +20,22 @@ const wheels = (w: readonly number[], f: (n: number) => number | string = r1) =>
   RR: f(w[1]!),
 })
 
+/** resultStatus 4+ = DNF, DSQ, not classified, retired. */
+const running = (c: CarSnapshot) => c.resultStatus <= 3
+
+/** Nearest running cars ahead and behind the player (retired cars keep a position). */
+function neighbours(s: RaceSnapshot, me: CarSnapshot | undefined) {
+  if (!me) return { ahead: undefined, behind: undefined }
+  const others = s.cars.filter((c) => !c.isPlayer && running(c))
+  const ahead = others
+    .filter((c) => c.position < me.position)
+    .sort((a, b) => b.position - a.position)[0]
+  const behind = others
+    .filter((c) => c.position > me.position)
+    .sort((a, b) => a.position - b.position)[0]
+  return { ahead, behind }
+}
+
 export function situation(s: RaceSnapshot) {
   const me = s.cars.find((c) => c.isPlayer)
   const sess = s.session
@@ -39,8 +55,7 @@ export function situation(s: RaceSnapshot) {
 export function raceSnapshotView(s: RaceSnapshot) {
   const me = s.cars.find((c) => c.isPlayer)
   const p = s.player
-  const ahead = me ? s.cars.find((c) => c.position === me.position - 1) : undefined
-  const behind = me ? s.cars.find((c) => c.position === me.position + 1) : undefined
+  const { ahead, behind } = neighbours(s, me)
   return {
     ...situation(s),
     // The game labels the driver's car with that seat's real driver; it IS the driver.
@@ -228,8 +243,7 @@ export function paceTargetsView(s: RaceSnapshot) {
       )
   }
 
-  const ahead = me ? s.cars.find((c) => c.position === me.position - 1) : undefined
-  const behind = me ? s.cars.find((c) => c.position === me.position + 1) : undefined
+  const { ahead, behind } = neighbours(s, me)
   const chase =
     ahead && me && me.deltaToCarInFrontMs > 0
       ? (() => {

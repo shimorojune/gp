@@ -193,3 +193,14 @@ describe('persona', () => {
     expect(isSilent('Good lap, mate.')).toBe(false)
   })
 })
+
+describe('retired cars', () => {
+  it('are skipped when finding the car ahead and behind', () => {
+    const s = snapshot()
+    s.cars[0]!.resultStatus = 7 // HAMILTON retired, still listed P6
+    s.cars.unshift(car({ carIdx: 5, name: 'RUSSELL', position: 5, lastLapMs: 74400 }))
+    const v = raceSnapshotView(s)
+    expect(v.gapAhead?.driver).toBe('RUSSELL')
+    expect(paceTargetsView(s).chase?.driver).toBe('RUSSELL')
+  })
+})
