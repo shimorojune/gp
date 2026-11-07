@@ -5,6 +5,7 @@ import {
   type SDKUserMessage,
   query,
 } from '@anthropic-ai/claude-agent-sdk'
+import type { HistoryDb } from '@gp/history'
 import { TypedEmitter } from '@gp/shared'
 import type { RaceSnapshot } from '@gp/telemetry'
 import type { NotesStore } from './notes.ts'
@@ -16,6 +17,8 @@ import { situation } from './views.ts'
 export interface EngineerOptions {
   snapshot: () => RaceSnapshot
   notes: NotesStore
+  /** Long-term session history (gp.db). Optional so tests and the CLI can run without it. */
+  history?: HistoryDb
   driverName?: string
   engineerName?: string
   /** Model for things the driver asks. Default 'sonnet'. */
@@ -97,6 +100,8 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
   /** Turns run one at a time so each can pick its model. */
   private chain: Promise<unknown> = Promise.resolve()
   private currentModel: string | null = null
+  /** Background for the next turn (track brief, profile update), sent with it, not on its own. */
+  private context: string[] = []
 
   constructor(private readonly opts: EngineerOptions) {
     super()
@@ -107,6 +112,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
     const { server, toolNames } = createRaceTools({
       snapshot: this.opts.snapshot,
       notes: this.opts.notes,
+      ...(this.opts.history ? { history: this.opts.history } : {}),
     })
     const track = this.opts.snapshot().session?.track ?? null
     const options: Options = {
@@ -115,6 +121,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
         driverName: this.opts.driverName ?? 'Rohit',
         engineerName: this.opts.engineerName ?? 'GP',
         notes: this.opts.notes.relevant(track),
+        profile: this.opts.history?.profile()?.text ?? null,
       }),
       // He's an engineer, not a coding agent: no built-in tools, only race data + notes.
       tools: [],
@@ -133,6 +140,15 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
     this.q = query({ prompt: this.input, options })
     this.currentModel = this.chatModel
     this.loop = this.consume(this.q)
+  }
+
+  /**
+   * Background the engineer should know (a track brief, a profile update) without a turn of
+   * its own: it rides along with the next message, so it costs no extra call.
+   */
+  addContext(text: string): void {
+    this.context.push(text)
+    if (this.context.length > 4) this.context.shift()
   }
 
   /** Ask the engineer something. The current race status is prepended automatically. */
@@ -164,6 +180,10 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
 
   private send(content: string, model: string, kind: TurnKind): Promise<Reply> {
     this.start()
+    if (this.context.length) {
+      content = `${this.context.map((c) => `[context] ${c}`).join('\n')}\n${content}`
+      this.context = []
+    }
     const id = this.nextId++
     const run = async (): Promise<Reply> => {
       if (model !== this.currentModel) {

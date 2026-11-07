@@ -1,6 +1,12 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
+import {
+  EngineerSession,
+  NotesStore,
+  attachHistory,
+  attachRadio,
+  debriefSession,
+} from '@gp/engineer'
 import { HistoryDb, backfill, ingestRecording, pruneRecordings } from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
@@ -40,6 +46,7 @@ mkdirSync(engineerCwd, { recursive: true })
 const engineer = new EngineerSession({
   snapshot: () => state.snapshot(),
   notes: new NotesStore(join(GP_HOME, 'notes.json')),
+  history,
   cwd: engineerCwd,
   ...(process.env.GP_MODEL ? { model: process.env.GP_MODEL } : {}),
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
@@ -55,7 +62,9 @@ engineer.on('error', (e) => {
   toChat({ type: 'error', message: e.message })
 })
 engineer.on('turn', (t) => console.log(`[engineer] ${t.phase} #${t.id} ${t.kind} ${t.detail}`))
+const historyHooks = attachHistory(state, history, (t) => engineer.addContext(t))
 attachRadio(state, engineer, {
+  lapNote: historyHooks.lapNote,
   onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
     voice.radioCall(r.text, urgent)
@@ -110,6 +119,20 @@ function afterIngest(): void {
     console.log(`[history] deleted ${gone.length} old raw recording(s): ${gone.join(', ')}`)
 }
 
+/** Summary for the records and an updated driver profile, by the cheap model. */
+async function debrief(ids: number[]): Promise<void> {
+  for (const id of ids) {
+    try {
+      const d = await debriefSession(history, id, { cwd: engineerCwd })
+      if (!d) continue
+      console.log(`[history] debrief #${id}: ${d.summary}`)
+      engineer.addContext(`Session debrief saved: ${d.summary} Updated profile: ${d.profile}`)
+    } catch (e) {
+      console.error(`[history] debrief #${id} failed:`, e instanceof Error ? e.message : e)
+    }
+  }
+}
+
 function logIngest(r: Awaited<ReturnType<typeof ingestRecording>>): void {
   if (r.error) console.error(`[history] ${r.file}: ${r.error}`)
   else
@@ -127,8 +150,10 @@ async function closeRecording(): Promise<void> {
   await w.close()
   if (path)
     queueHistory(async () => {
-      logIngest(await ingestRecording(history, path))
+      const r = await ingestRecording(history, path)
+      logIngest(r)
       afterIngest()
+      await debrief(r.ids)
     })
 }
 
@@ -262,11 +287,12 @@ app.whenReady().then(async () => {
   console.log(`[udp] listening on 0.0.0.0:${PORT}`)
   // Recordings from earlier runs (or ones the app quit before reading) go into the history.
   queueHistory(async () => {
-    await backfill(history, RECORDINGS_DIR, {
+    const rs = await backfill(history, RECORDINGS_DIR, {
       skip: (p) => p === writerPath,
       onResult: logIngest,
     })
     afterIngest()
+    await debrief(rs.flatMap((r) => r.ids))
   })
   createWindow()
   // Pre-create the overlay (hidden) and warm the engineer so the first answer is quick.

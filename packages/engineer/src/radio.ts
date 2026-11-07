@@ -23,6 +23,8 @@ export interface RadioOptions {
    */
   onPositionChange?: (from: number, to: number) => void
   now?: () => number
+  /** Extra text for the player's lap event, e.g. "New personal best at this track". */
+  lapNote?: (lap: { lapTimeMs: number; valid: boolean }) => string | null
 }
 
 interface Queued {
@@ -162,9 +164,10 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const offLap = state.on('lapCompleted', (l) => {
     if (!l.isPlayer) return
+    const note = opts.lapNote?.(l)
     // Rounded to the tenth here: given milliseconds, the model reads them all out.
     push(
-      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}.`,
+      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}.${note ? ` ${note}` : ''}`,
     )
   })
 

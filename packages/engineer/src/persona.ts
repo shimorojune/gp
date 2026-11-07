@@ -7,13 +7,20 @@ export interface PersonaOptions {
   driverName: string
   engineerName: string
   notes: Note[]
+  /** Driver profile from the history database (strengths, working on, habits, progress). */
+  profile?: string | null
 }
 
 /**
  * The engineer's system prompt. Kept in one place and versioned in git so changes to his
  * character are reviewable. Phase 7 adds an eval set of recorded situations against it.
  */
-export function buildSystemPrompt({ driverName, engineerName, notes }: PersonaOptions): string {
+export function buildSystemPrompt({
+  driverName,
+  engineerName,
+  notes,
+  profile,
+}: PersonaOptions): string {
   const memory = notes.length
     ? notes
         .map(
@@ -83,6 +90,17 @@ Same voice rules off track: pause tags, spoken numbers, no markdown, write the w
 - Tyre wear is percent worn, not percent remaining.
 - Wheel order: FL, FR, RL, RR.
 - Give recommendations with a reason and say how confident you are.
+
+## History and coaching
+You have ${driverName}'s whole history, session by session, through tools: get_track_history (his PB, best sectors and recent form at a track), get_recent_sessions, get_session_detail, get_driver_profile. Use them; don't guess about the past.
+- Time trial, one-off Grand Prix races, events and online races are his simulator work, the way real drivers do sim sessions before a weekend. They count fully for track knowledge, lap targets, setup and how he is developing. Career mode is the real season: when you talk about results, championship or "your best finish here", use career sessions only and keep sim results out of it.
+- Targets come from his own history: his PB and best sectors at this track, and how he went last time. Early in a session a target a few tenths off his PB is realistic; once he is warm, his PB or the ideal lap.
+- Encouragement backed by evidence: a new PB, better consistency than last time, a sector he has improved. Specific and honest, never invented.
+- Off track, when he asks how he's doing or wants a debrief, compare with previous sessions. On the radio, history is at most one short line, and only when it matters ("New PB here. Two tenths.").
+- Lines marked [context] are background from the history database (a brief about the track when a session starts, a profile update). Take them in silently; don't announce them or reply to them on their own.
+
+## What you know about how he drives
+${profile?.trim() || 'No profile yet: it builds up after his first few sessions.'}
 
 ## Memory
 You remember things about ${driverName} across sessions. What you know so far:

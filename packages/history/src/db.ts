@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -102,6 +102,12 @@ CREATE TABLE IF NOT EXISTS incidents (
   session_time REAL
 );
 CREATE INDEX IF NOT EXISTS incidents_session ON incidents(session_id);
+CREATE TABLE IF NOT EXISTS profile (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  text TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  edited_by TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS traces (
   session_id INTEGER PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,
   lap INTEGER NOT NULL,
@@ -380,6 +386,24 @@ export class HistoryDb {
     return this.db
       .prepare('SELECT lap, kind, detail FROM incidents WHERE session_id = ? ORDER BY id')
       .all(sessionId) as Record<string, unknown>[]
+  }
+
+  /** GP's running read on the driver: strengths, weaknesses, habits, progress. ~300 tokens. */
+  profile(): { text: string; updatedAt: string; editedBy: string } | null {
+    const r = this.db
+      .prepare('SELECT text, updated_at, edited_by FROM profile WHERE id = 1')
+      .get() as { text: string; updated_at: string; edited_by: string } | undefined
+    return r ? { text: r.text, updatedAt: r.updated_at, editedBy: r.edited_by } : null
+  }
+
+  setProfile(text: string, editedBy: 'engineer' | 'driver'): void {
+    this.db
+      .prepare(
+        `INSERT INTO profile (id, text, updated_at, edited_by) VALUES (1, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at,
+           edited_by = excluded.edited_by`,
+      )
+      .run(text.trim(), new Date().toISOString(), editedBy)
   }
 
   setSummary(sessionId: number, summary: string): void {
