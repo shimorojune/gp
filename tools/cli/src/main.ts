@@ -129,16 +129,19 @@ async function inspect(): Promise<void> {
   const state = new RaceState({ now: () => clock })
   const counts = new Map<number, number>()
   const rejected = new Map<string, number>()
-  const sessions: string[] = []
-  const laps: string[] = []
-  state.on('sessionStarted', ({ uid }) => sessions.push(uid))
+  const sessions: { uid: string; startedAt: number; label: string; laps: string[] }[] = []
+  state.on('sessionStarted', ({ uid }) =>
+    sessions.push({ uid, startedAt: clock, label: '', laps: [] }),
+  )
   state.on('lapCompleted', (l) => {
     if (l.isPlayer)
-      laps.push(
-        `  lap ${String(l.lapNumber).padStart(2)}  ${formatLapTime(l.lapTimeMs)}  ` +
-          `S1 ${formatLapTime(l.sector1Ms)} S2 ${formatLapTime(l.sector2Ms)} S3 ${formatLapTime(l.sector3Ms)}` +
-          `  ${l.tyreVisual ?? '?'} (${l.tyreAgeLaps ?? '?'} laps)${l.valid ? '' : '  INVALID'}`,
-      )
+      sessions
+        .at(-1)
+        ?.laps.push(
+          `  lap ${String(l.lapNumber).padStart(2)}  ${formatLapTime(l.lapTimeMs)}  ` +
+            `S1 ${formatLapTime(l.sector1Ms)} S2 ${formatLapTime(l.sector2Ms)} S3 ${formatLapTime(l.sector3Ms)}` +
+            `  ${l.tyreVisual ?? '?'} (${l.tyreAgeLaps ?? '?'} laps)${l.valid ? '' : '  INVALID'}`,
+        )
   })
   let total = 0
   let duration = 0
@@ -163,9 +166,15 @@ async function inspect(): Promise<void> {
   }
   if (rejected.size) console.log('rejected:', Object.fromEntries(rejected))
   console.log(`sessions: ${sessions.length}`)
+  for (const [n, sess] of sessions.entries()) {
+    const start = (sess.startedAt / 1000).toFixed(0)
+    console.log(
+      `\nsession ${n + 1} (uid ${sess.uid}, from ${start}s): ${sess.laps.length} player laps`,
+    )
+    if (sess.laps.length) console.log(sess.laps.join('\n'))
+  }
   if (s.session)
-    console.log(`last session: ${s.session.track} ${s.session.sessionType}, ${s.session.weather}`)
-  if (laps.length) console.log(`player laps:\n${laps.join('\n')}`)
+    console.log(`\nlast session: ${s.session.track} ${s.session.sessionType}, ${s.session.weather}`)
 }
 
 async function live(): Promise<void> {
@@ -188,7 +197,7 @@ async function live(): Promise<void> {
       lines.push(
         `P${me.position}  lap ${me.currentLap}  last ${formatLapTime(me.lastLapMs)}  best ${formatLapTime(p.bestLapMs)}  current ${formatLapTime(me.currentLapMs)}${p.lapInvalid ? ' (invalid)' : ''}`,
         `${p.speedKph} km/h  gear ${p.gear}  thr ${(p.throttle * 100).toFixed(0)}%  brk ${(p.brake * 100).toFixed(0)}%`,
-        `tyres ${me.tyreVisual ?? '?'} ${me.tyreAgeLaps ?? '?'} laps, wear RL/RR/FL/FR ${wear}%  fuel ${p.fuelKg.toFixed(1)}kg (${p.fuelRemainingLaps.toFixed(1)} laps)  ERS ${p.ersPercent.toFixed(0)}%`,
+        `tyres ${me.tyreVisual ?? '?'} ${me.tyreAgeLaps ?? '?'} laps, wear RL/RR/FL/FR ${wear}%  fuel ${p.fuelKg.toFixed(1)}kg (${p.fuelMarginLaps >= 0 ? '+' : ''}${p.fuelMarginLaps.toFixed(1)} laps margin)  ERS ${p.ersPercent.toFixed(0)}%`,
       )
     }
     process.stdout.write(`\x1b[2J\x1b[H${lines.join('\n')}\n`)

@@ -90,7 +90,11 @@ export interface PlayerSnapshot {
   tyrePressure: Wheels<number>
   brakeTemp: Wheels<number>
   fuelKg: number
-  fuelRemainingLaps: number
+  /**
+   * Fuel margin in laps vs. what the game thinks you need to finish (the MFD fuel delta).
+   * +1.4 means 1.4 laps spare, negative means you need to save. NOT laps left in the tank.
+   */
+  fuelMarginLaps: number
   fuelMix: number
   brakeBias: number
   ersPercent: number
@@ -222,13 +226,12 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
   ingest(packet: Packet): void {
     const at = this.now()
     const { header } = packet
+    // Menus send Event packets with sessionUID 0. They aren't part of any session.
+    if (header.sessionUID === 0n) return
     if (this.uid !== header.sessionUID) {
-      // sessionUID 0 shows up in menus; don't treat it as a session.
-      if (header.sessionUID !== 0n) {
-        this.uid = header.sessionUID
-        this.resetSession()
-        this.emit('sessionStarted', { uid: header.sessionUID.toString() })
-      }
+      this.uid = header.sessionUID
+      this.resetSession()
+      this.emit('sessionStarted', { uid: header.sessionUID.toString() })
     }
     this.playerIdx = header.playerCarIndex
     this.sessionTime = header.sessionTime
@@ -414,7 +417,7 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
       tyrePressure: t.tyresPressure,
       brakeTemp: t.brakesTemperature,
       fuelKg: st.fuelInTank,
-      fuelRemainingLaps: st.fuelRemainingLaps,
+      fuelMarginLaps: st.fuelRemainingLaps,
       fuelMix: st.fuelMix,
       brakeBias: st.frontBrakeBias,
       ersPercent: (st.ersStoreEnergy / 4_000_000) * 100,

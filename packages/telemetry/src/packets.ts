@@ -561,7 +561,10 @@ export interface CarStatus {
   /** kg */
   fuelInTank: number
   fuelCapacity: number
-  /** Laps of fuel left relative to what the game expects you to need (can be negative). */
+  /**
+   * Fuel margin in laps (the MFD fuel delta): surplus over what's needed to finish, can be
+   * negative. Despite the name it is NOT laps of fuel left in the tank.
+   */
   fuelRemainingLaps: number
   maxRPM: number
   idleRPM: number

@@ -51,7 +51,7 @@ function render({ race, listener, recording }: SnapshotMessage): void {
       ${cell('Tyre', me ? `${esc(me.tyreVisual ?? '?')} (${esc(me.tyreActual ?? '?')}), ${me.tyreAgeLaps ?? '?'} laps` : '-')}
       ${cell('Wear %', wheels(p.tyreWear))}
       ${cell('Surface °C', wheels(p.tyreSurfaceTemp))}${cell('Pressure psi', wheels(p.tyrePressure, 1))}
-      ${cell('Fuel', `${p.fuelKg.toFixed(1)} kg`)}${cell('Fuel laps', p.fuelRemainingLaps.toFixed(2))}
+      ${cell('Fuel', `${p.fuelKg.toFixed(1)} kg`)}${cell('Fuel margin', `${p.fuelMarginLaps >= 0 ? '+' : ''}${p.fuelMarginLaps.toFixed(2)} laps`)}
       ${cell('ERS', `${p.ersPercent.toFixed(0)}%`)}${cell('Brake bias', `${p.brakeBias}%`)}
     </div>`
     if (p.laps.length) {

@@ -99,3 +99,15 @@ describe('RaceState', () => {
     expect(s.pitWindowLatestLap).toBe(24)
   })
 })
+
+describe('RaceState menu packets', () => {
+  it('ignores packets with sessionUID 0 (sent from menus)', () => {
+    const state = new RaceState({ now: () => 0 })
+    const starts: string[] = []
+    state.on('sessionStarted', (s) => starts.push(s.uid))
+    state.ingest(parsed(buildPacket(PacketId.Session, { sessionUID: 5n })))
+    state.ingest(parsed(buildPacket(PacketId.Event, { sessionUID: 0n })))
+    state.ingest(parsed(buildPacket(PacketId.Session, { sessionUID: 5n })))
+    expect(starts).toEqual(['5'])
+  })
+})
