@@ -27,20 +27,24 @@ export class ElevenLabsTts implements Tts {
 
   async synth(text: string, signal: AbortSignal): Promise<TtsAudio> {
     const url = `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream?output_format=pcm_${this.sampleRate}`
-    const res = await fetch(url, {
-      method: 'POST',
-      signal,
-      headers: {
-        'xi-api-key': this.apiKey,
-        'content-type': 'application/json',
-        accept: 'audio/pcm',
-      },
-      body: JSON.stringify({
-        text,
-        model_id: this.model,
-        voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0, speed: 1.05 },
-      }),
-    })
+    const request = () =>
+      fetch(url, {
+        method: 'POST',
+        signal,
+        headers: {
+          'xi-api-key': this.apiKey,
+          'content-type': 'application/json',
+          accept: 'audio/pcm',
+        },
+        body: JSON.stringify({
+          text,
+          model_id: this.model,
+          voice_settings: { stability: 0.55, similarity_boost: 0.75, style: 0, speed: 1.05 },
+        }),
+      })
+    let res = await request()
+    // ElevenLabs throws the odd 500; one quick retry, then the caller falls back to the Mac voice.
+    if (res.status >= 500 && !signal.aborted) res = await request()
     if (!res.ok || !res.body)
       throw new Error(`elevenlabs ${res.status}: ${(await res.text()).slice(0, 200)}`)
     const body = res.body as unknown as AsyncIterable<Uint8Array>
