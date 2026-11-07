@@ -110,6 +110,9 @@ function createChatWindow(): BrowserWindow {
     alwaysOnTop: true,
     show: false,
     skipTaskbar: true,
+    // A non-activating NSPanel: floats over the fullscreen game and takes clicks and typing
+    // without activating the app, so macOS doesn't switch out of the game's Space.
+    ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -130,11 +133,10 @@ function createChatWindow(): BrowserWindow {
 
 function toggleChat(): void {
   chatWin ??= createChatWindow()
-  if (chatWin.isVisible() && chatWin.isFocused()) chatWin.hide()
-  else {
-    chatWin.show()
-    chatWin.focus()
-  }
+  // show()/focus() would activate the app and pull the driver out of the fullscreen game.
+  // Show it inactive; click into it to type.
+  if (chatWin.isVisible()) chatWin.hide()
+  else chatWin.showInactive()
 }
 
 app.whenReady().then(async () => {
