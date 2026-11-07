@@ -15,12 +15,15 @@
     "test": "vitest run --passWithNoTests",
     "chat": "tsx src/main.ts chat",
     "ptt-test": "tsx src/main.ts ptt-test",
-    "gate-test": "tsx src/main.ts gate-test"
+    "gate-test": "tsx src/main.ts gate-test",
+    "history": "tsx src/main.ts history",
+    "ingest": "tsx src/main.ts ingest"
   },
   "dependencies": {
+    "@gp/engineer": "workspace:*",
+    "@gp/history": "workspace:*",
     "@gp/shared": "workspace:*",
     "@gp/telemetry": "workspace:*",
-    "@gp/engineer": "workspace:*",
     "@gp/voice": "workspace:*",
     "node-hid": "^3.1.2"
   },

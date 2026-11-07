@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
 import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
+import { HistoryDb, backfill, ingestRecording } from '@gp/history'
 import { formatLapTime } from '@gp/shared'
 import {
   DEFAULT_PORT,
@@ -46,6 +47,11 @@ const USAGE = `gp <command> [options]
           Talk to the engineer in the terminal, against live telemetry or a recording.
           --until replays up to that many seconds as fast as possible, then freezes there.
           Needs a Claude Code login on this machine (claude /login).
+  ingest  [file.gprec... | dir] [--db ~/Documents/GP/gp.db]
+          Read recordings into the history database (default: every new one in
+          ~/Documents/GP/recordings). Never deletes anything.
+  history [--db ~/Documents/GP/gp.db] [--last 20]
+          List the sessions GP remembers.
   gate-test <file.gprec>
           How often GP would be allowed to talk (on a straight) over a recording.
   ptt-test [--raw]
@@ -73,6 +79,8 @@ const { values, positionals } = parseArgs({
     'check-model': { type: 'string' },
     'no-radio': { type: 'boolean' },
     raw: { type: 'boolean' },
+    db: { type: 'string' },
+    last: { type: 'string' },
   },
 })
 const port = values.port ? Number(values.port) : DEFAULT_PORT
@@ -95,6 +103,12 @@ switch (command) {
     break
   case 'ptt-test':
     await pttTest()
+    break
+  case 'ingest':
+    await ingest()
+    break
+  case 'history':
+    showHistory()
     break
   case 'gate-test':
     await gateTest()
@@ -523,4 +537,39 @@ async function gateTest(): Promise<void> {
     .map((w) => `${(w / 1000).toFixed(1)}s`)
   console.log(`driving ${(driving / 1000).toFixed(0)}s, clear to talk ${pct}%`)
   console.log(`${windows.length} windows, ${long} of 2s+, longest ${top.join(' ')}`)
+}
+
+function historyDb(): HistoryDb {
+  return new HistoryDb(values.db ? resolve(cwd, values.db) : join(gpHome(), 'gp.db'))
+}
+
+async function ingest(): Promise<void> {
+  const db = historyDb()
+  const targets = positionals.length
+    ? positionals.map((p) => resolve(cwd, p))
+    : [join(gpHome(), 'recordings')]
+  for (const target of targets) {
+    if (target.endsWith('.gprec')) {
+      const r = await ingestRecording(db, target)
+      console.log(`${r.file}: ${r.error ?? `${r.sessions.length} session(s)`}`)
+    } else {
+      const rs = await backfill(db, target, {
+        onResult: (r) => console.log(`${r.file}: ${r.error ?? `${r.sessions.length} session(s)`}`),
+      })
+      console.log(`${target}: ${rs.length} new recording(s)`)
+    }
+  }
+  db.close()
+}
+
+function showHistory(): void {
+  const db = historyDb()
+  for (const s of db.recentSessions(Number(values.last ?? 20)).reverse()) {
+    const best = s.best_lap_ms ? formatLapTime(s.best_lap_ms) : '-'
+    const result = s.finish_pos ? ` P${s.finish_pos} from P${s.grid_pos}` : ''
+    console.log(
+      `${s.started_at.slice(0, 16)}  ${s.program.padEnd(6)} ${s.track} ${s.session_type} (${s.mode}): ${s.laps_done} laps, best ${best}${result}`,
+    )
+  }
+  db.close()
 }

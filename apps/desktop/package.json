@@ -11,10 +11,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.319",
+    "@gp/engineer": "workspace:*",
+    "@gp/history": "workspace:*",
     "@gp/shared": "workspace:*",
     "@gp/telemetry": "workspace:*",
-    "@gp/engineer": "workspace:*",
-    "@anthropic-ai/claude-agent-sdk": "0.3.319",
     "@gp/voice": "workspace:*",
     "node-hid": "^3.1.2"
   },

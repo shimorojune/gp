@@ -290,3 +290,28 @@ export const INFRINGEMENT_TYPES: Record<number, string> = {
   53: 'mandatory pitstop',
   54: 'attribute assigned',
 }
+
+/** F1 23 game modes (Session packet `gameMode`). */
+export const GAME_MODES: Record<number, string> = {
+  0: 'Event Mode',
+  3: 'Grand Prix',
+  4: "Grand Prix '23",
+  5: 'Time Trial',
+  6: 'Splitscreen',
+  7: 'Online Custom',
+  8: 'Online League',
+  11: 'Career Invitational',
+  12: 'Championship Invitational',
+  13: 'Championship',
+  14: 'Online Championship',
+  15: 'Online Weekly Event',
+  17: 'Story Mode',
+  19: "Career '22",
+  20: "Career '22 Online",
+  21: "Career '23",
+  22: "Career '23 Online",
+  127: 'Benchmark',
+}
+
+/** Career seasons count as the real thing; everything else is simulator time. */
+export const CAREER_GAME_MODES: ReadonlySet<number> = new Set([19, 20, 21, 22])

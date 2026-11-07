@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { EngineerSession, NotesStore, attachRadio } from '@gp/engineer'
+import { HistoryDb, backfill, ingestRecording, pruneRecordings } from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
 import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
@@ -22,6 +23,10 @@ const RECORDINGS_DIR = process.env.GP_RECORDINGS_DIR ?? join(GP_HOME, 'recording
 const CHAT_HOTKEY = process.env.GP_CHAT_HOTKEY ?? 'CommandOrControl+Shift+G'
 /** Keyboard push-to-talk fallback (press to talk, press again to send). Main PTT is the DualSense mute button. */
 const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
+
+/** Raw recordings kept on disk once they're in the history database (~400 MB per race). */
+const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 10)
+const history = new HistoryDb(join(GP_HOME, 'gp.db'))
 
 const listener = new TelemetryListener({ port: PORT })
 const state = new RaceState()
@@ -73,8 +78,7 @@ listener.on('raw', ({ buf, at }) => {
 state.on('sessionStarted', () => {
   // The first packets of the app run start a file and a session at the same moment.
   if (!writer || !autoRecord || writer.count < 100) return
-  void writer.close()
-  writer = null
+  void closeRecording()
   startRecording()
 })
 listener.on('error', (err) => console.error('[udp]', err))
@@ -93,11 +97,45 @@ function startRecording(): void {
   console.log(`[rec] recording to ${writerPath}`)
 }
 
+/** Serial queue: one recording read at a time, in the background. */
+let historyQueue: Promise<unknown> = Promise.resolve()
+function queueHistory(job: () => Promise<void>): void {
+  historyQueue = historyQueue.then(job).catch((e) => console.error('[history]', e))
+}
+
+function afterIngest(): void {
+  if (!Number.isFinite(KEEP_RECORDINGS) || KEEP_RECORDINGS <= 0) return
+  const gone = pruneRecordings(history, RECORDINGS_DIR, KEEP_RECORDINGS, writerPath)
+  if (gone.length)
+    console.log(`[history] deleted ${gone.length} old raw recording(s): ${gone.join(', ')}`)
+}
+
+function logIngest(r: Awaited<ReturnType<typeof ingestRecording>>): void {
+  if (r.error) console.error(`[history] ${r.file}: ${r.error}`)
+  else
+    console.log(
+      `[history] ${r.file}: ${r.sessions.map((s) => `${s.track} ${s.sessionType} (${s.mode}, ${s.laps.length} laps)`).join('; ') || 'nothing driven'}`,
+    )
+}
+
+/** Close the current recording and save its sessions to the history database. */
+async function closeRecording(): Promise<void> {
+  const w = writer
+  const path = writerPath
+  writer = null
+  if (!w) return
+  await w.close()
+  if (path)
+    queueHistory(async () => {
+      logIngest(await ingestRecording(history, path))
+      afterIngest()
+    })
+}
+
 async function toggleRecording(): Promise<RecordingState> {
   if (writer) {
     autoRecord = false
-    await writer.close()
-    writer = null
+    await closeRecording()
   } else {
     autoRecord = true
     startRecording()
@@ -222,6 +260,14 @@ app.whenReady().then(async () => {
 
   await listener.start()
   console.log(`[udp] listening on 0.0.0.0:${PORT}`)
+  // Recordings from earlier runs (or ones the app quit before reading) go into the history.
+  queueHistory(async () => {
+    await backfill(history, RECORDINGS_DIR, {
+      skip: (p) => p === writerPath,
+      onResult: logIngest,
+    })
+    afterIngest()
+  })
   createWindow()
   // Pre-create the overlay (hidden) and warm the engineer so the first answer is quick.
   chatWin = createChatWindow()
@@ -262,7 +308,10 @@ app.on('will-quit', () => {
 
 app.on('window-all-closed', async () => {
   await engineer.close().catch(() => {})
+  // Read at the next launch: don't hold up quitting for a few seconds of parsing.
   if (writer) await writer.close()
+  await historyQueue
+  history.close()
   await listener.stop()
   app.quit()
 })
