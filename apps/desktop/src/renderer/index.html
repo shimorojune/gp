@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <title>GP</title>
+    <style>
+      :root {
+        --bg: #0d0f12;
+        --panel: #161a1f;
+        --line: #252b33;
+        --text: #e6e8eb;
+        --muted: #8a939e;
+        --good: #3ccf6e;
+        --warn: #f2b33d;
+        --bad: #ef4b4b;
+        --purple: #b36cff;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 12px;
+        background: var(--bg);
+        color: var(--text);
+        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+      header h1 { font-size: 15px; margin: 0; letter-spacing: 0.08em; }
+      .pill { padding: 2px 8px; border-radius: 999px; background: var(--panel); color: var(--muted); }
+      .pill.live { color: var(--good); }
+      .pill.paused { color: var(--warn); }
+      .pill.no-data { color: var(--bad); }
+      .spacer { flex: 1; }
+      button {
+        background: var(--panel); color: var(--text); border: 1px solid var(--line);
+        border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer;
+      }
+      button.on { border-color: var(--bad); color: var(--bad); }
+      section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+      section h2 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 6px; }
+      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px; }
+      .k { color: var(--muted); font-size: 11px; }
+      .v { font-size: 15px; }
+      .big { font-size: 22px; }
+      table { width: 100%; border-collapse: collapse; }
+      td, th { padding: 2px 4px; text-align: left; }
+      th { color: var(--muted); font-weight: normal; font-size: 11px; }
+      tr.me td { color: var(--purple); }
+      .invalid { color: var(--bad); }
+      .muted { color: var(--muted); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>GP</h1>
+      <span id="status" class="pill no-data">no-data</span>
+      <span id="pps" class="pill">0 pkt/s</span>
+      <span class="spacer"></span>
+      <button id="ontop">Pin</button>
+      <button id="rec">Record</button>
+    </header>
+    <section id="session"><h2>Session</h2><div class="muted">Waiting for F1 23 telemetry on UDP 20777...</div></section>
+    <section id="player"><h2>Car</h2><div class="muted">No car data yet.</div></section>
+    <section id="laps"><h2>Laps</h2><div class="muted">No completed laps.</div></section>
+    <section id="order"><h2>Order</h2><div class="muted">-</div></section>
+    <section id="diag"><h2>Listener</h2><div class="muted">-</div></section>
+    <script src="app.js"></script>
+  </body>
+</html>

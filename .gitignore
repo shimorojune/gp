@@ -1,0 +1,8 @@
+node_modules/
+dist/
+out/
+*.log
+.turbo/
+recordings/*.gprec
+!recordings/.gitkeep
+.DS_Store

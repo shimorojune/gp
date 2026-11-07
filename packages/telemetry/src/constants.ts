@@ -1,0 +1,197 @@
+/** F1 23 UDP spec constants (packet format 2023). */
+
+export const PACKET_FORMAT = 2023
+export const NUM_CARS = 22
+export const HEADER_SIZE = 29
+export const DEFAULT_PORT = 20777
+
+export enum PacketId {
+  Motion = 0,
+  Session = 1,
+  LapData = 2,
+  Event = 3,
+  Participants = 4,
+  CarSetups = 5,
+  CarTelemetry = 6,
+  CarStatus = 7,
+  FinalClassification = 8,
+  LobbyInfo = 9,
+  CarDamage = 10,
+  SessionHistory = 11,
+  TyreSets = 12,
+  MotionEx = 13,
+}
+
+/** Exact packet sizes in bytes for format 2023 (from the spec; confirmed on Rohit's Mac). */
+export const PACKET_SIZES: Record<PacketId, number> = {
+  [PacketId.Motion]: 1349,
+  [PacketId.Session]: 644,
+  [PacketId.LapData]: 1131,
+  [PacketId.Event]: 45,
+  [PacketId.Participants]: 1306,
+  [PacketId.CarSetups]: 1107,
+  [PacketId.CarTelemetry]: 1352,
+  [PacketId.CarStatus]: 1239,
+  [PacketId.FinalClassification]: 1020,
+  [PacketId.LobbyInfo]: 1218,
+  [PacketId.CarDamage]: 953,
+  [PacketId.SessionHistory]: 1460,
+  [PacketId.TyreSets]: 231,
+  [PacketId.MotionEx]: 217,
+}
+
+export const TRACKS: Record<number, string> = {
+  0: 'Melbourne',
+  1: 'Paul Ricard',
+  2: 'Shanghai',
+  3: 'Sakhir',
+  4: 'Catalunya',
+  5: 'Monaco',
+  6: 'Montreal',
+  7: 'Silverstone',
+  8: 'Hockenheim',
+  9: 'Hungaroring',
+  10: 'Spa',
+  11: 'Monza',
+  12: 'Singapore',
+  13: 'Suzuka',
+  14: 'Abu Dhabi',
+  15: 'Texas',
+  16: 'Brazil',
+  17: 'Austria',
+  18: 'Sochi',
+  19: 'Mexico',
+  20: 'Baku',
+  21: 'Sakhir Short',
+  22: 'Silverstone Short',
+  23: 'Texas Short',
+  24: 'Suzuka Short',
+  25: 'Hanoi',
+  26: 'Zandvoort',
+  27: 'Imola',
+  28: 'Portimao',
+  29: 'Jeddah',
+  30: 'Miami',
+  31: 'Las Vegas',
+  32: 'Losail',
+}
+
+export const SESSION_TYPES: Record<number, string> = {
+  0: 'Unknown',
+  1: 'P1',
+  2: 'P2',
+  3: 'P3',
+  4: 'Short Practice',
+  5: 'Q1',
+  6: 'Q2',
+  7: 'Q3',
+  8: 'Short Qualifying',
+  9: 'One-Shot Qualifying',
+  10: 'Race',
+  11: 'Race 2',
+  12: 'Race 3',
+  13: 'Time Trial',
+}
+
+export const WEATHER: Record<number, string> = {
+  0: 'Clear',
+  1: 'Light cloud',
+  2: 'Overcast',
+  3: 'Light rain',
+  4: 'Heavy rain',
+  5: 'Storm',
+}
+
+/** Actual compounds (C-numbers) as the game reports them. */
+export const ACTUAL_COMPOUNDS: Record<number, string> = {
+  16: 'C5',
+  17: 'C4',
+  18: 'C3',
+  19: 'C2',
+  20: 'C1',
+  21: 'C0',
+  7: 'Inter',
+  8: 'Wet',
+  9: 'Dry (classic)',
+  10: 'Wet (classic)',
+  11: 'Super soft (F2)',
+  12: 'Soft (F2)',
+  13: 'Medium (F2)',
+  14: 'Hard (F2)',
+  15: 'Wet (F2)',
+}
+
+/** Visual compounds (what the sidewall shows). */
+export const VISUAL_COMPOUNDS: Record<number, string> = {
+  16: 'Soft',
+  17: 'Medium',
+  18: 'Hard',
+  7: 'Inter',
+  8: 'Wet',
+  15: 'Wet (F2)',
+  19: 'Super soft (F2)',
+  20: 'Soft (F2)',
+  21: 'Medium (F2)',
+  22: 'Hard (F2)',
+}
+
+export const SAFETY_CAR_STATUS: Record<number, string> = {
+  0: 'None',
+  1: 'Full safety car',
+  2: 'Virtual safety car',
+  3: 'Formation lap',
+}
+
+export const PIT_STATUS: Record<number, string> = { 0: 'None', 1: 'Pitting', 2: 'In pit area' }
+
+export const DRIVER_STATUS: Record<number, string> = {
+  0: 'In garage',
+  1: 'Flying lap',
+  2: 'In lap',
+  3: 'Out lap',
+  4: 'On track',
+}
+
+export const RESULT_STATUS: Record<number, string> = {
+  0: 'Invalid',
+  1: 'Inactive',
+  2: 'Active',
+  3: 'Finished',
+  4: 'DNF',
+  5: 'Disqualified',
+  6: 'Not classified',
+  7: 'Retired',
+}
+
+export const ERS_MODES: Record<number, string> = {
+  0: 'None',
+  1: 'Medium',
+  2: 'Hotlap',
+  3: 'Overtake',
+}
+
+export const FUEL_MIX: Record<number, string> = { 0: 'Lean', 1: 'Standard', 2: 'Rich', 3: 'Max' }
+
+export const EVENT_CODES = {
+  SessionStarted: 'SSTA',
+  SessionEnded: 'SEND',
+  FastestLap: 'FTLP',
+  Retirement: 'RTMT',
+  DrsEnabled: 'DRSE',
+  DrsDisabled: 'DRSD',
+  TeamMateInPits: 'TMPT',
+  ChequeredFlag: 'CHQF',
+  RaceWinner: 'RCWN',
+  Penalty: 'PENA',
+  SpeedTrap: 'SPTP',
+  StartLights: 'STLG',
+  LightsOut: 'LGOT',
+  DriveThroughServed: 'DTSV',
+  StopGoServed: 'SGSV',
+  Flashback: 'FLBK',
+  Buttons: 'BUTN',
+  RedFlag: 'RDFL',
+  Overtake: 'OVTK',
+} as const
+
+export type EventCode = (typeof EVENT_CODES)[keyof typeof EVENT_CODES]

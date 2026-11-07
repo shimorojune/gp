@@ -1,0 +1,21 @@
+{
+  "name": "@gp/desktop",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs && electron .",
+    "typecheck": "tsc -p .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gp/shared": "workspace:*",
+    "@gp/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "esbuild": "^0.24.0"
+  }
+}

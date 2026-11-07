@@ -1,0 +1,22 @@
+{
+  "name": "@gp/cli",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": { "gp": "./src/main.ts" },
+  "scripts": {
+    "record": "tsx src/main.ts record",
+    "replay": "tsx src/main.ts replay",
+    "inspect": "tsx src/main.ts inspect",
+    "live": "tsx src/main.ts live",
+    "typecheck": "tsc -p .",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@gp/shared": "workspace:*",
+    "@gp/telemetry": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
+  }
+}

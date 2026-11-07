@@ -464,7 +464,7 @@ we'd stop and rethink before going further.
 - Push-to-talk = DualSense mic-mute via HID; mic = DualSense over USB-C (Buds as wireless
   fallback).
 
-### Phase 1 — Telemetry core (1 week)
+### Phase 1 — Telemetry core (1 week) — **done 2026-11-07, needs a real-recording check**
 
 - Typed parsers for packets 1–7 and 10–12 (Motion, Motion Ex and Lobby later).
 - Recorder: dump raw packets with timestamps to a file per session.
