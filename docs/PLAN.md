@@ -356,7 +356,7 @@ That's fine for "how are the tyres?" and useless for "brake now". Hence:
 Rohit's ask (2026-11-07): GP should have the personality, sarcasm and racing intelligence
 of the real GP with Max. The prompt lives in `packages/engineer/src/persona.ts` and covers:
 
-- **Character:** realistic above all (Rohit 2026-11-07: no scripted jokes). Calm, flat, few words, humour only as deadpan understatement, blunt, pushes back
+- **Character:** realistic above all (Rohit 2026-11-07: no scripted jokes). Calm, flat, few words, humour only as deadpan understatement, honest but constructive, openly backs Rohit (he asked for motivation; frequent specific praise, reassure after mistakes), pushes back
   ("we'll discuss it after the race"), swears freely, nothing off limits. Respect is shown
   sparingly so it lands. Thinks laps ahead about tyres, gaps, undercut and safety cars.
 - **Racing craft:** praises overtakes, places gained and gaps closing; is honest about places
