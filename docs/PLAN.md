@@ -420,6 +420,22 @@ Each phase ends with something you can use. Rough effort assumes evenings/weeken
 If UDP fails and none of the fallbacks work, the project as described is in trouble;
 we'd stop and rethink before going further.
 
+**Phase 0 results so far (2026-11-07, on Rohit's M4, macOS 26.6.1, Node 24):**
+
+- UDP from F1 23 under CrossOver reaches Node `dgram` on `0.0.0.0:20777`. Header
+  `packetFormat 2023`, `gameYear 23`, game v1.21, `packetVersion 1`. All 12 expected packet
+  types in Time Trial arrived, and each size matched the spec. The high-rate packets come at ~20 Hz.
+- Bind to `0.0.0.0`, not `127.0.0.1`: the source address flipped between `127.0.0.1` and
+  the LAN IP between runs.
+- Paused = only Event packets (BUTN), `sessionTime` frozen. Treat that as "paused", not
+  "disconnected".
+- The game's `hardware_settings_config.xml` lags the in-game setting, so don't read it to detect
+  whether telemetry is on.
+- Agent SDK on the Max login: no auth issues. Warm time-to-first-text ~1.6–1.7s for both
+  Haiku and Sonnet tiers; API time ~0.9s Haiku, ~1.1–1.6s Sonnet. A fresh `query()` per message
+  adds 3–5s of CLI process start/stop, so the long-lived streaming session is mandatory.
+- Still to do: DualSense PTT with the game focused, whisper speed with the game running.
+
 ### Phase 1 — Telemetry core (1 week)
 
 - Typed parsers for packets 1–7 and 10–12 (Motion, Motion Ex and Lobby later).
