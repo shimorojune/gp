@@ -67,7 +67,13 @@ export interface CarSnapshot {
   deltaToLeaderMs: number
   pitStatus: number
   numPitStops: number
+  /** Unserved time penalties in seconds. F1 23 serves them at the next pit stop; else added at the finish. */
   penaltiesSec: number
+  /** The next pit stop will serve the time penalty (adds it to the stationary time). */
+  servePenaltyAtNextStop: boolean
+  warnings: number
+  unservedDriveThroughs: number
+  unservedStopGos: number
   driverStatus: number
   resultStatus: number
   tyreVisual: string | null
@@ -487,6 +493,10 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
         pitStatus: l.pitStatus,
         numPitStops: l.numPitStops,
         penaltiesSec: l.penalties,
+        servePenaltyAtNextStop: l.pitStopShouldServePen === 1,
+        warnings: l.totalWarnings,
+        unservedDriveThroughs: l.numUnservedDriveThroughPens,
+        unservedStopGos: l.numUnservedStopGoPens,
         driverStatus: l.driverStatus,
         resultStatus: l.resultStatus,
         tyreVisual: st ? (VISUAL_COMPOUNDS[st.visualTyreCompound] ?? null) : null,

@@ -67,7 +67,15 @@ export function raceSnapshotView(s: RaceSnapshot) {
         }
       : null,
     pitStops: me?.numPitStops ?? null,
-    timePenaltiesSec: me?.penaltiesSec ?? null,
+    penalties: me
+      ? {
+          unservedTimeSec: me.penaltiesSec,
+          servedAtNextStop: me.servePenaltyAtNextStop,
+          warnings: me.warnings,
+          unservedDriveThroughs: me.unservedDriveThroughs,
+          unservedStopGos: me.unservedStopGos,
+        }
+      : null,
   }
 }
 
