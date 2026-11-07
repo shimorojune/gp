@@ -11,6 +11,7 @@ class FakeState extends TypedEmitter<Record<string, unknown>> {
   }
   snapshot() {
     return {
+      status: 'live',
       session: { track: 'Brazil', sessionType: 'Race' },
       cars: [
         { carIdx: 0, name: 'ROHIT', isPlayer: true, position: this.position },
@@ -42,13 +43,13 @@ const ovtk = (passer: number, passed: number) => ({
 })
 
 describe('attachRadio', () => {
-  it('dedupes repeated overtakes and reads the position after it settles', async () => {
+  it('dedupes repeated overtakes', async () => {
     const { state, sent, stop } = setup()
     state.fire('event', ovtk(0, 3))
     state.fire('event', ovtk(0, 3))
     state.position = 6
     await tick(60)
-    expect(sent).toEqual(['Overtake: we passed NORRIS, timing now shows P6.'])
+    expect(sent).toEqual(['Overtake: we passed NORRIS.'])
     stop()
   })
 
@@ -110,6 +111,24 @@ describe('attachRadio', () => {
     await tick(80)
     expect(sent).toHaveLength(2)
     expect(sent[1]).toMatch(/^New session started \(Brazil Race\)/)
+    stop()
+  })
+})
+
+describe('attachRadio when not live', () => {
+  it('stays quiet in menus and while paused', async () => {
+    const { state, sent, stop } = setup()
+    const snap = state.snapshot.bind(state)
+    state.snapshot = () => ({ ...snap(), status: 'no-data' })
+    state.fire('lapCompleted', {
+      isPlayer: true,
+      lapNumber: 1,
+      lapTimeMs: 75000,
+      valid: true,
+      position: 7,
+    })
+    await tick(50)
+    expect(sent).toEqual([])
     stop()
   })
 })

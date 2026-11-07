@@ -56,6 +56,8 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       })
   }
   const push = (text: string) => {
+    // Nothing to say on the radio in menus or while paused.
+    if (state.snapshot().status !== 'live') return
     queued.push(text)
     schedule()
   }
@@ -68,7 +70,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     queued = []
     seenOvertakes.clear()
     const s = state.snapshot().session
-    push(
+    queued.push(
       `New session started${s ? ` (${s.track} ${s.sessionType})` : ''}: a restart or a new session. Laps, positions and gaps from before no longer apply.`,
     )
   })
@@ -96,13 +98,12 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     setTimeout(() => {
       if (closed) return
       const s = state.snapshot()
-      const cur = s.cars.find((c) => c.isPlayer)
       const name = (idx: number) => s.cars.find((c) => c.carIdx === idx)?.name ?? `car ${idx}`
-      const pos = cur ? `, timing now shows P${cur.position}` : ''
+      // No position here: the event and LapData disagree for a moment; the engineer reads timing.
       push(
         passer === me.carIdx
-          ? `Overtake: we passed ${name(passed)}${pos}.`
-          : `Lost a place: ${name(passer)} passed us${pos}.`,
+          ? `Overtake: we passed ${name(passed)}.`
+          : `Lost a place: ${name(passer)} passed us.`,
       )
     }, settleMs)
   })

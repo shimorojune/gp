@@ -195,3 +195,17 @@ export const EVENT_CODES = {
 } as const
 
 export type EventCode = (typeof EVENT_CODES)[keyof typeof EVENT_CODES]
+
+/** F1 23 team ids (2023 grid). Others (F2, custom, My Team) fall back to "team N". */
+export const TEAMS: Record<number, string> = {
+  0: 'Mercedes',
+  1: 'Ferrari',
+  2: 'Red Bull Racing',
+  3: 'Williams',
+  4: 'Aston Martin',
+  5: 'Alpine',
+  6: 'AlphaTauri',
+  7: 'Haas',
+  8: 'McLaren',
+  9: 'Alfa Romeo',
+}

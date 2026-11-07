@@ -121,6 +121,7 @@ describe('views', () => {
 
   it('race snapshot reports gaps ahead and behind', () => {
     const v = raceSnapshotView(snapshot())
+    expect(v.yourCar).toEqual({ seatName: 'ROHIT', team: 'Mercedes' })
     expect(v.gapAhead).toEqual({ driver: 'HAMILTON', gap: '+1.800' })
     expect(v.gapBehind).toEqual({ driver: 'NORRIS', gap: '+0.900' })
     expect(v.tyreWearPct).toEqual({ FL: 8, FR: 9, RL: 10, RR: 11 })

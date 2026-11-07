@@ -8,6 +8,7 @@ import {
   ACTUAL_COMPOUNDS,
   type CarSnapshot,
   type RaceSnapshot,
+  TEAMS,
   VISUAL_COMPOUNDS,
 } from '@gp/telemetry'
 
@@ -42,6 +43,8 @@ export function raceSnapshotView(s: RaceSnapshot) {
   const behind = me ? s.cars.find((c) => c.position === me.position + 1) : undefined
   return {
     ...situation(s),
+    // The game labels the driver's car with that seat's real driver; it IS the driver.
+    yourCar: me ? { seatName: me.name, team: TEAMS[me.teamId] ?? `team ${me.teamId}` } : null,
     lastLap: formatLapTime(me?.lastLapMs),
     bestLap: formatLapTime(p?.bestLapMs),
     currentLapInvalid: p?.lapInvalid ?? null,
@@ -64,7 +67,7 @@ export function raceSnapshotView(s: RaceSnapshot) {
         }
       : null,
     pitStops: me?.numPitStops ?? null,
-    penaltiesSec: me?.penaltiesSec ?? null,
+    timePenaltiesSec: me?.penaltiesSec ?? null,
   }
 }
 
@@ -91,6 +94,7 @@ function carRow(c: CarSnapshot) {
     pos: c.position,
     driver: c.name,
     you: c.isPlayer || undefined,
+    team: TEAMS[c.teamId] ?? `team ${c.teamId}`,
     gapToCarAhead: c.position === 1 ? null : formatDelta(c.deltaToCarInFrontMs),
     gapToLeader: c.position === 1 ? null : formatDelta(c.deltaToLeaderMs),
     lastLap: formatLapTime(c.lastLapMs),
@@ -100,7 +104,7 @@ function carRow(c: CarSnapshot) {
     stops: c.numPitStops,
     stints: c.stints.length > 1 ? c.stints.map((st) => st.compound).join(' > ') : undefined,
     inPit: c.pitStatus > 0 || undefined,
-    penaltiesSec: c.penaltiesSec || undefined,
+    timePenaltiesSec: c.penaltiesSec || undefined,
     out: c.resultStatus > 3 || undefined,
   }
 }
