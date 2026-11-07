@@ -174,6 +174,18 @@ function toggleChat(): void {
   else chatWin.showInactive()
 }
 
+// A second copy would share UDP 20777 with the first and split the telemetry between them
+// (each sees only some packets), so the radio calls silently go missing. One copy only.
+if (!app.requestSingleInstanceLock()) {
+  console.log('[main] GP is already running; quitting this copy')
+  app.quit()
+  process.exit(0)
+}
+app.on('second-instance', () => {
+  win?.show()
+  win?.focus()
+})
+
 app.whenReady().then(async () => {
   ipcMain.handle(IPC.chatAsk, async (_e, text: string) => {
     try {
