@@ -1,5 +1,5 @@
 import { formatLapTime } from '@gp/shared'
-import type { RaceState } from '@gp/telemetry'
+import { INFRINGEMENT_TYPES, PENALTY_TYPES, type RaceState } from '@gp/telemetry'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 
@@ -84,6 +84,28 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const offEvent = state.on('event', (e) => {
     const d = e.details
+    if (d.code === 'PENA' && 'penaltyType' in d) {
+      const me = state.snapshot().cars.find((c) => c.isPlayer)
+      // Warnings and lap invalidations come every few corners; the game shows those itself.
+      if (
+        !me ||
+        d.vehicleIdx !== me.carIdx ||
+        d.penaltyType === 5 ||
+        (d.penaltyType >= 10 && d.penaltyType <= 15)
+      )
+        return
+      const type = PENALTY_TYPES[d.penaltyType] ?? `penalty type ${d.penaltyType}`
+      const why = INFRINGEMENT_TYPES[d.infringementType] ?? `infringement ${d.infringementType}`
+      const secs = d.penaltyType === 4 || d.penaltyType === 1 ? ` (${d.time}s)` : ''
+      push(`Penalty: ${type}${secs} for ${why}.`)
+      return
+    }
+    if ((d.code === 'SGSV' || d.code === 'DTSV') && 'vehicleIdx' in d) {
+      const me = state.snapshot().cars.find((c) => c.isPlayer)
+      if (me && d.vehicleIdx === me.carIdx)
+        push(d.code === 'SGSV' ? 'Stop-go penalty served.' : 'Drive-through penalty served.')
+      return
+    }
     if (d.code !== 'OVTK' || !('overtakingVehicleIdx' in d)) return
     const me = state.snapshot().cars.find((c) => c.isPlayer)
     if (!me) return

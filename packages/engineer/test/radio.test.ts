@@ -132,3 +132,33 @@ describe('attachRadio when not live', () => {
     stop()
   })
 })
+
+describe('attachRadio penalties', () => {
+  it('reports stop-go and time penalties, skips warnings, reports serving', async () => {
+    const { state, sent, stop } = setup()
+    const pena = (penaltyType: number, infringementType: number, time: number) => ({
+      code: 'PENA',
+      details: {
+        code: 'PENA',
+        penaltyType,
+        infringementType,
+        vehicleIdx: 0,
+        otherVehicleIdx: 8,
+        time,
+        lapNum: 6,
+        placesGained: 0,
+      },
+    })
+    state.fire('event', pena(5, 27, 0))
+    state.fire('event', pena(1, 3, 5))
+    await tick(1)
+    state.fire('event', pena(4, 21, 3))
+    state.fire('event', { code: 'SGSV', details: { code: 'SGSV', vehicleIdx: 0 } })
+    await tick(80)
+    expect(sent).toEqual([
+      'Penalty: stop go (5s) for big collision.',
+      'Penalty: time penalty (3s) for multiple warnings. Stop-go penalty served.',
+    ])
+    stop()
+  })
+})
