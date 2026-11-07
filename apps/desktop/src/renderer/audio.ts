@@ -51,7 +51,7 @@ export class RadioPlayer {
         this.enqueue(m.pcm, m.sampleRate)
         break
       case 'say':
-        this.say(m.text)
+        this.say(m.text, m.voice)
         break
       case 'end':
         if (this.openUtt === m.utt) {
@@ -123,9 +123,17 @@ export class RadioPlayer {
     osc.stop(ctx.currentTime + 0.09)
   }
 
-  private say(text: string): void {
+  private say(text: string, preferred?: string): void {
     const u = new SpeechSynthesisUtterance(text)
-    const voice = speechSynthesis.getVoices().find((v) => /en-GB/i.test(v.lang))
+    const voices = speechSynthesis.getVoices()
+    const gb = voices.filter((v) => /en[-_]GB/i.test(v.lang))
+    // Prefer a named voice, then a downloaded Premium/Enhanced British voice, then Daniel.
+    const voice =
+      (preferred && voices.find((v) => v.name.toLowerCase().includes(preferred.toLowerCase()))) ||
+      gb.find((v) => /premium/i.test(v.name)) ||
+      gb.find((v) => /enhanced/i.test(v.name)) ||
+      gb.find((v) => /daniel/i.test(v.name)) ||
+      gb[0]
     if (voice) u.voice = voice
     u.rate = 1.05
     speechSynthesis.speak(u)

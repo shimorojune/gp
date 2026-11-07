@@ -15,7 +15,7 @@ export const IPC = {
 export type AudioMessage =
   | { type: 'pcm'; utt: number; sampleRate: number; pcm: Uint8Array }
   /** No TTS key: speak with the Mac's built-in voice. */
-  | { type: 'say'; utt: number; text: string }
+  | { type: 'say'; utt: number; text: string; voice?: string }
   | { type: 'end'; utt: number }
   /** Stop everything now (driver pressed push-to-talk). */
   | { type: 'stop' }

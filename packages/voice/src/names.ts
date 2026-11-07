@@ -81,3 +81,41 @@ export function fixDriverNames(text: string, names: string[]): string {
   }
   return out.join('')
 }
+
+/** First names and nicknames for the 2023 grid, so "gap to Max" is understood and STT is primed. */
+const FIRST_NAMES: Record<string, string[]> = {
+  verstappen: ['Max'],
+  perez: ['Checo', 'Sergio'],
+  hamilton: ['Lewis'],
+  russell: ['George'],
+  leclerc: ['Charles'],
+  sainz: ['Carlos'],
+  norris: ['Lando'],
+  piastri: ['Oscar'],
+  alonso: ['Fernando'],
+  stroll: ['Lance'],
+  gasly: ['Pierre'],
+  ocon: ['Esteban'],
+  albon: ['Alex'],
+  sargeant: ['Logan'],
+  tsunoda: ['Yuki'],
+  devries: ['Nyck'],
+  ricciardo: ['Daniel'],
+  lawson: ['Liam'],
+  bottas: ['Valtteri'],
+  zhou: ['Guanyu'],
+  magnussen: ['Kevin', 'K-Mag'],
+  hulkenberg: ['Nico', 'Hulk'],
+}
+
+export function firstNamesFor(names: string[]): string[] {
+  return names.flatMap((n) => FIRST_NAMES[norm(n)] ?? [])
+}
+
+/** Common radio phrases that STT gets wrong ("gap 2 Max" -> "gap to Max"). */
+export function fixRadioPhrases(text: string): string {
+  return text
+    .replace(/\b(gap|get|cap)\s+(2|two|too)\b/gi, 'gap to')
+    .replace(/\b[Gg]et to\b(?=\s+[A-Z])/g, 'gap to')
+    .replace(/\bbocks\b/gi, 'box')
+}

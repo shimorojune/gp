@@ -13,7 +13,9 @@ import {
   type Tts,
   WhisperStt,
   displayName,
+  firstNamesFor,
   fixDriverNames,
+  fixRadioPhrases,
 } from '@gp/voice'
 import type { AudioMessage, ChatEvent } from '../ipc.ts'
 
@@ -120,7 +122,12 @@ export class RadioVoice {
   private hints(): string[] {
     const s = this.d.state.snapshot()
     const names = s.cars.map((c) => displayName(c.name))
-    return [...names, ...(s.session ? [s.session.track] : []), ...F1_TERMS]
+    return [
+      ...names,
+      ...firstNamesFor(s.cars.map((c) => c.name)),
+      ...(s.session ? [s.session.track] : []),
+      ...F1_TERMS,
+    ]
   }
 
   private pressed(): void {
@@ -160,7 +167,7 @@ export class RadioVoice {
       }
     }
     const names = this.d.state.snapshot().cars.map((c) => c.name)
-    text = fixDriverNames(text, names).trim()
+    text = fixRadioPhrases(fixDriverNames(text, names)).trim()
     const sttMs = Math.round(performance.now() - t0)
     this.d.log(
       `[stt] ${used} ${sttMs}ms after release (held ${Math.round(heldMs)}ms, pressed ${Math.round(t0 - this.pressedAt)}ms): "${text}"`,
@@ -171,7 +178,8 @@ export class RadioVoice {
     }
     this.d.toChat({ type: 'heard', text, stt: used, sttMs })
     const live = this.d.state.snapshot().status === 'live'
-    const model = live ? process.env.GP_LIVE_MODEL : undefined
+    // On track, speed beats depth: Haiku answers in ~1.5-2s vs ~4.5s for Sonnet (Mac test).
+    const model = live ? (process.env.GP_LIVE_MODEL ?? 'haiku') : undefined
     try {
       const r = await this.d.engineer.ask(`[voice] ${text}`, model ? { model } : {})
       this.d.toChat({
@@ -206,7 +214,7 @@ export class RadioVoice {
     const clean = text.replace(/[*_#`]/g, '')
     if (!this.tts) {
       this.speakChain = this.speakChain.then(() => {
-        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean })
+        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean, ...macVoice() })
       })
       return
     }
@@ -218,7 +226,7 @@ export class RadioVoice {
     this.speakChain = this.speakChain.then(async () => {
       const a = await audio
       if (!a) {
-        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean })
+        if (!signal.aborted) this.d.toAudio({ type: 'say', utt, text: clean, ...macVoice() })
         return
       }
       try {
@@ -246,3 +254,5 @@ export class RadioVoice {
     this.mic.stop()
   }
 }
+
+const macVoice = () => (process.env.GP_MAC_VOICE ? { voice: process.env.GP_MAC_VOICE } : {})

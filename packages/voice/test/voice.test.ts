@@ -83,3 +83,12 @@ describe('env and wav', () => {
     expect(wav.length).toBe(3244)
   })
 })
+
+describe('radio phrases', () => {
+  it('fixes common mishearings', async () => {
+    const { fixRadioPhrases, firstNamesFor } = await import('../src/names.ts')
+    expect(fixRadioPhrases('Gap 2 max.')).toBe('gap to max.')
+    expect(fixRadioPhrases('Get to Leclerc,')).toBe('gap to Leclerc,')
+    expect(firstNamesFor(['VERSTAPPEN', 'PÉREZ'])).toEqual(['Max', 'Checo', 'Sergio'])
+  })
+})
