@@ -443,7 +443,8 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
 
   private bestLapFor(i: number): number {
     const h = this.history.get(i)
-    if (h && h.bestLapTimeLapNum > 0) {
+    // The game reports out-of-range values (seen: 199) when there is no valid lap yet.
+    if (h && h.bestLapTimeLapNum > 0 && h.bestLapTimeLapNum <= h.numLaps) {
       const best = h.lapHistory[h.bestLapTimeLapNum - 1]?.lapTimeInMS ?? 0
       if (best > 0) return best
     }

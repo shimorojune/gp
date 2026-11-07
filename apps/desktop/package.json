@@ -15,7 +15,7 @@
     "@gp/telemetry": "workspace:*"
   },
   "devDependencies": {
-    "electron": "^33.2.1",
+    "electron": "45.0.0",
     "esbuild": "^0.24.0"
   }
 }
