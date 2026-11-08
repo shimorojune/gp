@@ -475,20 +475,51 @@ const METHOD = [
 ]
 
 /** Guide entries for a symptom (or everything), for the get_setup_guide tool. */
+type Balance = 'under' | 'over'
+type Phase = 'entry' | 'mid' | 'exit'
+
+/** The handling balance and corner phase a description is about, from how drivers say it. */
+function classify(text: string): { balance: Balance | null; phase: Phase | null } {
+  const t = text.toLowerCase()
+  const over =
+    /oversteer|loose|rear (steps|slides|kicks|goes|snaps)|snap|spin|wheelspin|traction|tail/.test(t)
+  const under =
+    /understeer|won'?t turn|push(es|ing)? wide|runs? wide|front (washes|slides)|no front/.test(t)
+  const balance = over && !under ? 'over' : under && !over ? 'under' : null
+  const phase = /exit|on (the )?throttle|on power|out of|accelerat|traction|wheelspin/.test(t)
+    ? 'exit'
+    : /entry|turn[- ]?in|braking|under brakes|into the corner/.test(t)
+      ? 'entry'
+      : /mid|apex|fast corner|high speed/.test(t)
+        ? 'mid'
+        : null
+  return { balance, phase }
+}
+
 export function setupGuide(symptom?: string) {
   if (!symptom) return { method: METHOD, settings: SETTINGS, fixes: FIXES.map((f) => f.symptom) }
   const q = symptom.toLowerCase()
-  const scored = FIXES.map((f) => ({
-    f,
-    score:
-      f.keywords.filter((k) => q.includes(k)).length +
-      (q.includes(f.symptom.toLowerCase()) ? 3 : 0),
-  }))
+  const want = classify(q)
+  const scored = FIXES.map((f) => {
+    const has = classify(f.symptom)
+    // An oversteer complaint never gets understeer fixes, and the other way round.
+    if (want.balance && has.balance && want.balance !== has.balance) return { f, score: 0 }
+    return {
+      f,
+      score:
+        f.keywords.filter((k) => q.includes(k)).length +
+        (q.includes(f.symptom.toLowerCase()) ? 3 : 0) +
+        (want.balance && want.balance === has.balance ? 2 : 0) +
+        (want.phase && want.phase === has.phase ? 3 : 0),
+    }
+  })
     .filter((x) => x.score > 0)
     .sort((a, b) => b.score - a.score)
+  // Top three, plus anything tied with the third so a good match is never cut off.
+  const cut = scored[2]?.score ?? 0
   return {
     method: METHOD,
-    matches: scored.slice(0, 3).map((x) => x.f),
+    matches: scored.filter((x, i) => i < 3 || x.score >= cut).map((x) => x.f),
     ...(scored.length
       ? {}
       : { note: 'No direct match; all symptoms listed.', symptoms: FIXES.map((f) => f.symptom) }),
