@@ -4,6 +4,7 @@ import {
   EngineerSession,
   type NoteCategory,
   NotesStore,
+  PitPlan,
   attachHistory,
   attachRadio,
   debriefSession,
@@ -56,7 +57,9 @@ let chatWin: BrowserWindow | null = null
 const notes = new NotesStore(join(GP_HOME, 'notes.json'))
 const engineerCwd = join(GP_HOME, 'engineer')
 mkdirSync(engineerCwd, { recursive: true })
+const pitPlan = new PitPlan()
 const engineer = new EngineerSession({
+  pitPlan,
   snapshot: () => state.snapshot(),
   notes,
   history,
@@ -88,6 +91,7 @@ attachRadio(state, engineer, {
   lapNote: historyHooks.lapNote,
   locate: historyHooks.locate,
   incidentMemory: historyHooks.incidentMemory,
+  pitPlan,
   onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
     voice.radioCall(r.text, urgent)

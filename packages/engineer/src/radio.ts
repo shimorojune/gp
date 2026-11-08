@@ -10,6 +10,8 @@ import {
 import { IncidentDetector, type IncidentMemory } from './incidents.ts'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
+import type { PitPlan } from './strategy.ts'
+import { paceTargetsView } from './views.ts'
 
 export interface CallInfo {
   /** Safety car, a penalty to serve: say it now, even mid-corner, and cut anything else. */
@@ -37,6 +39,8 @@ export interface RadioOptions {
   locate?: (lapDistanceM: number) => string | null
   /** Incidents kept across sessions (history DB), so repeats at a spot add up. */
   incidentMemory?: IncidentMemory
+  /** The agreed pit plan (set_pit_plan): the radio calls him in from it. */
+  pitPlan?: PitPlan
 }
 
 interface Queued {
@@ -131,6 +135,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       safetyCar = sc
     }
     const me = s.cars.find((c) => c.isPlayer)
+    if (isDriving(s) && me && sessionKind(s.session?.sessionType) === 'race') raceCalls(me)
     if (!isDriving(s) || !me?.position) return
     // Outside races the position is the timesheet: it moves when others set laps, not when
     // anyone passes him. The lap events carry it instead.
@@ -175,6 +180,46 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     )
   }, pollMs)
 
+  // Race calls that come from the car, not from a question: the box call, pit exit.
+  let pitStatus: number | null = null
+  let stops: number | null = null
+  const raceCalls = (me: {
+    currentLap: number
+    sector: number
+    pitStatus: number
+    numPitStops: number
+    tyreVisual: string | null
+  }) => {
+    const plan = opts.pitPlan
+    if (
+      plan?.lap &&
+      me.currentLap === plan.lap &&
+      me.sector === 2 &&
+      plan.calledLap !== plan.lap &&
+      !me.pitStatus
+    ) {
+      plan.calledLap = plan.lap
+      push(
+        `BOX THIS LAP (agreed plan: lap ${plan.lap}${plan.compound ? `, ${plan.compound}` : ''}). Call him in now: "Box, box." plus the tyre, nothing else.`,
+        'urgent',
+      )
+    }
+    // Leaving the box: the pit exit line is a penalty if he crosses it.
+    if (pitStatus === 2 && me.pitStatus === 1)
+      push(
+        'Leaving the pit box. One line: mind the white line on pit exit, stay on the right side of it.',
+        'urgent',
+      )
+    pitStatus = me.pitStatus
+    if (stops !== null && me.numPitStops > stops) {
+      plan?.clear()
+      push(
+        `Pit stop ${me.numPitStops} done, now on ${me.tyreVisual ?? 'new tyres'}. The pit plan is cleared: if another stop is needed, agree it (get_strategy, set_pit_plan).`,
+      )
+    }
+    stops = me.numPitStops
+  }
+
   // Spins and impacts, from the player's own car at ~10 Hz.
   const incidents = new IncidentDetector(opts.locate, opts.incidentMemory ?? null)
   const incidentPoll = setInterval(() => {
@@ -203,14 +248,22 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const offSession = state.on('sessionStarted', () => {
     incidents.reset()
+    pitStatus = null
+    stops = null
+    opts.pitPlan?.clear()
     // A restart or a new session: whatever was queued is about the old one.
     queued = []
     reported = null
     pending = null
     safetyCar = null
     const s = state.snapshot().session
+    const isRace = sessionKind(s?.sessionType) === 'race'
     queued.push({
-      text: `New session started${s ? ` (${s.track} ${s.sessionType})` : ''}: a restart or a new session. Laps, positions and gaps from before no longer apply.`,
+      text: `New session started${s ? ` (${s.track} ${s.sessionType})` : ''}: a restart or a new session. Laps, positions and gaps from before no longer apply.${
+        isRace
+          ? ' This is a race: before the start, brief him in a few short sentences. The strategy (get_strategy: one stop or two, target box lap, tyre), agreed with set_pit_plan; and the goal for today from the car and the season (get_team_pace, get_career in career mode): a target position and the rival to beat.'
+          : ''
+      }`,
       kind: 'other',
     })
   })
@@ -218,12 +271,41 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   const offLap = state.on('lapCompleted', (l) => {
     if (!l.isPlayer) return
     const note = opts.lapNote?.(l)
-    const race = sessionKind(state.snapshot().session?.sessionType) === 'race'
+    const snap = state.snapshot()
+    const race = sessionKind(snap.session?.sessionType) === 'race'
+    const extra = race ? raceLapNotes(snap, l.lapNumber) : ''
     // Rounded to the tenth here: given milliseconds, the model reads them all out.
     push(
-      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}${race ? '' : ' on the timesheet'}.${note ? ` ${note}` : ''}`,
+      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}${race ? '' : ' on the timesheet'}.${note ? ` ${note}` : ''}${extra}`,
     )
   })
+
+  /** Gap trends, the pit plan countdown and race milestones, for the engineer to pick from. */
+  const raceLapNotes = (snap: ReturnType<RaceState['snapshot']>, done: number): string => {
+    const out: string[] = []
+    const t = paceTargetsView(snap)
+    if (t.chase)
+      out.push(
+        `Ahead: ${t.chase.driver} ${t.chase.gap}${t.chase.gapChangePerLap ? ` (${t.chase.gapChangePerLap}/lap)` : ''}${t.chase.lapsToCatchAtCurrentRate ? `, on him in ~${t.chase.lapsToCatchAtCurrentRate} laps` : ''}.`,
+      )
+    if (t.defend) out.push(`Behind: ${t.defend.driver} ${t.defend.gap}.`)
+    const plan = opts.pitPlan
+    if (plan?.lap && plan.lap > done) {
+      const n = plan.lap - done
+      out.push(
+        n === 1
+          ? `Box at the end of the next lap (${plan.compound ?? 'plan'}): warn him.`
+          : `Pit plan: box lap ${plan.lap}, in ${n} laps.`,
+      )
+    }
+    const total = snap.session?.totalLaps ?? 0
+    if (total >= 8) {
+      if (done === Math.floor(total / 2))
+        out.push("Halfway: a word on where he is against today's target.")
+      if (total - done === 5) out.push('Five laps to go: push him toward the target.')
+    }
+    return out.length ? ` ${out.join(' ')}` : ''
+  }
 
   const offEvent = state.on('event', (e) => {
     const d = e.details

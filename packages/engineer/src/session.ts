@@ -12,6 +12,7 @@ import type { LiveBest, LiveLaps } from './history.ts'
 import type { NotesStore } from './notes.ts'
 import { buildSystemPrompt } from './persona.ts'
 import { AsyncQueue } from './queue.ts'
+import type { PitPlan } from './strategy.ts'
 import { createRaceTools } from './tools.ts'
 import { situation } from './views.ts'
 
@@ -24,6 +25,8 @@ export interface EngineerOptions {
   liveBest?: LiveBest
   /** This session's laps with their setups (for get_setup_trial). */
   liveLaps?: LiveLaps
+  /** The agreed pit plan, shared with the radio's box call. */
+  pitPlan?: PitPlan
   driverName?: string
   engineerName?: string
   /** Model for things the driver asks. Default 'sonnet'. */
@@ -130,6 +133,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
       ...(this.opts.history ? { history: this.opts.history } : {}),
       ...(this.opts.liveBest ? { liveBest: this.opts.liveBest } : {}),
       ...(this.opts.liveLaps ? { liveLaps: this.opts.liveLaps } : {}),
+      ...(this.opts.pitPlan ? { pitPlan: this.opts.pitPlan } : {}),
     })
     const track = this.opts.snapshot().session?.track ?? null
     const options: Options = {

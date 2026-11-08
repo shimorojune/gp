@@ -4,6 +4,7 @@ import type { RaceSnapshot } from '@gp/telemetry'
 import { z } from 'zod'
 import { type LiveBest, type LiveLaps, historyTools } from './history.ts'
 import type { NoteCategory, NotesStore } from './notes.ts'
+import { PitPlan, strategyView } from './strategy.ts'
 import {
   carStatusView,
   lapHistoryView,
@@ -27,12 +28,20 @@ export interface ToolDeps {
   history?: HistoryDb
   liveBest?: LiveBest
   liveLaps?: LiveLaps
+  pitPlan?: PitPlan
 }
 
 const categories = ['driving', 'setup', 'radio', 'strategy', 'personal', 'track'] as const
 
 /** In-process MCP server exposing live race data and the notes memory to the engineer. */
-export function createRaceTools({ snapshot, notes, history, liveBest, liveLaps }: ToolDeps) {
+export function createRaceTools({
+  snapshot,
+  notes,
+  history,
+  liveBest,
+  liveLaps,
+  pitPlan = new PitPlan(),
+}: ToolDeps) {
   const readOnly = { annotations: { readOnlyHint: true } }
   const tools = [
     tool(
@@ -106,6 +115,27 @@ export function createRaceTools({ snapshot, notes, history, liveBest, liveLaps }
       {},
       async () => json(tyreSetsView(snapshot())),
       readOnly,
+    ),
+    tool(
+      'get_strategy',
+      "Race pit strategy: laps left, fitted tyre wear and wear per lap, laps until the tyres are worn, the game's pit window, sets available, compounds used, a suggested plan, and the plan agreed with him. Use before the start and whenever stops come up.",
+      {},
+      async () => json(strategyView(snapshot(), pitPlan)),
+      readOnly,
+    ),
+    tool(
+      'set_pit_plan',
+      'Record the pit plan agreed with him: the lap to box on and the tyre. The radio then calls him in on that lap (a warning the lap before, "box, box" in the last sector). Change it whenever the plan changes (safety car, wear, undercut); lap 0 clears it (no stop planned).',
+      {
+        lap: z.number().int().min(0).describe('Lap to box at the end of; 0 = no stop planned'),
+        compound: z.string().optional().describe('Tyre to fit, e.g. Medium'),
+        reason: z.string().max(200).optional(),
+      },
+      async ({ lap, compound, reason }) => {
+        if (lap === 0) pitPlan.clear()
+        else pitPlan.set(lap, compound ?? null, reason ?? null)
+        return json({ agreedPlan: pitPlan.view() })
+      },
     ),
     tool(
       'remember_note',
