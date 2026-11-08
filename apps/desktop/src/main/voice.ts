@@ -38,12 +38,17 @@ const POST_ROLL_MS = 350
 const QUIET_DB = -32
 /** How long a sentence waits for a straight. Radio calls older than this are dropped. */
 const STRAIGHT_WAIT_MS = 10_000
+// He just asked and is waiting: hold for a straight only briefly. A 9 s hold looked like
+// silence, he pressed again, and the cut-off threw the unheard answer away.
+const ANSWER_WAIT_MS = 1_500
 
 interface SpeakOptions {
   /** Emergencies talk through corners. */
   urgent?: boolean
   /** Drop it rather than say it late if no straight comes in time (automatic calls). */
   dropIfLate?: boolean
+  /** Longest hold for a straight before speaking anyway (default STRAIGHT_WAIT_MS). */
+  maxWaitMs?: number
 }
 
 /**
@@ -136,14 +141,14 @@ export class RadioVoice {
         this.answering = this.utt
         this.d.log(`[voice] speaking answer #${id} as utterance ${this.utt}`)
       }
-      for (const sentence of sp.push(text)) this.speak(sentence)
+      for (const sentence of sp.push(text)) this.speak(sentence, { maxWaitMs: ANSWER_WAIT_MS })
     })
     this.d.engineer.on('reply', (r: Reply) => {
       if (r.kind !== 'ask' || r.id <= this.mutedThrough) return
       const sp = this.splitters.get(r.id)
       this.splitters.delete(r.id)
       const rest = sp?.flush()
-      if (rest) this.speak(rest)
+      if (rest) this.speak(rest, { maxWaitMs: ANSWER_WAIT_MS })
       this.endUtterance()
     })
   }
@@ -288,8 +293,8 @@ export class RadioVoice {
   private prevSentence: string | undefined
 
   /** Resolves true once he's on a straight, false if the wait ran out or speech was cut. */
-  private async waitForStraight(signal: AbortSignal): Promise<boolean> {
-    const until = performance.now() + STRAIGHT_WAIT_MS
+  private async waitForStraight(signal: AbortSignal, maxMs = STRAIGHT_WAIT_MS): Promise<boolean> {
+    const until = performance.now() + maxMs
     while (!this.clearToTalk) {
       if (signal.aborted || performance.now() > until) return false
       await new Promise((r) => setTimeout(r, 50))
@@ -303,7 +308,7 @@ export class RadioVoice {
     // Hold each sentence until a straight (mid-reply too: he pauses through the corner).
     const gate = async (): Promise<boolean> => {
       if (opts.urgent) return !signal.aborted
-      const ok = await this.waitForStraight(signal)
+      const ok = await this.waitForStraight(signal, opts.maxWaitMs)
       if (!ok && !signal.aborted && !opts.dropIfLate) return true
       return ok
     }
@@ -413,7 +418,9 @@ export class RadioVoice {
   }
 
   private stopSpeaking(): void {
-    this.d.log('[voice] cut off')
+    this.d.log(
+      `[voice] cut off${this.answering !== null ? ` (answer utterance ${this.answering} not finished)` : ''}`,
+    )
     this.speakAbort.abort()
     this.speakAbort = new AbortController()
     this.speakChain = Promise.resolve()
