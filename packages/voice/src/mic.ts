@@ -62,6 +62,8 @@ export class Mic extends TypedEmitter<MicEvents> {
     proc.stdout?.on('data', (chunk: Buffer) => this.ingest(chunk))
     proc.on('error', (e) => this.emit('error', e))
     proc.on('exit', (code) => {
+      // A restart() may already have replaced this process.
+      if (this.proc !== proc) return
       this.proc = null
       if (code) this.emit('error', new Error(`ffmpeg exited ${code}: ${stderr.trim().slice(-300)}`))
       this.emit('exit', { code })
@@ -106,6 +108,27 @@ export class Mic extends TypedEmitter<MicEvents> {
     this.proc?.kill('SIGTERM')
     this.proc = null
   }
+
+  /**
+   * Replace the capture process. avfoundation can keep delivering silence after the device
+   * changes under it (e.g. the DualSense mic was muted when capture started).
+   */
+  restart(): void {
+    this.stop()
+    this.ring = []
+    this.ringBytes = 0
+    this.start()
+  }
+}
+
+/** Loudest sample of s16le PCM in dBFS (-Infinity for digital silence). */
+export function peakDb(pcm: Buffer): number {
+  let peak = 0
+  for (let i = 0; i + 1 < pcm.length; i += 2) {
+    const v = Math.abs(pcm.readInt16LE(i))
+    if (v > peak) peak = v
+  }
+  return peak ? 20 * Math.log10(peak / 32768) : Number.NEGATIVE_INFINITY
 }
 
 /** Wrap s16le mono PCM in a WAV header. */

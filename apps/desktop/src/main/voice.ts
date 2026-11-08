@@ -17,6 +17,7 @@ import {
   firstNamesFor,
   fixDriverNames,
   fixRadioPhrases,
+  peakDb,
   plainSpeech,
 } from '@gp/voice'
 import type { AudioMessage, ChatEvent } from '../ipc.ts'
@@ -33,6 +34,8 @@ export interface VoiceDeps {
 const MIN_UTTERANCE_MS = 350
 /** Keep recording this long after the button is released. */
 const POST_ROLL_MS = 350
+// Speech on the DualSense mic peaks around -18 dB; a muted or stuck capture stays near -40 dB or below.
+const QUIET_DB = -32
 /** How long a sentence waits for a straight. Radio calls older than this are dropped. */
 const STRAIGHT_WAIT_MS = 10_000
 
@@ -234,7 +237,14 @@ export class RadioVoice {
       `[stt] ${used} ${sttMs}ms after release (held ${Math.round(heldMs)}ms, pressed ${Math.round(t0 - this.pressedAt)}ms): "${text}"`,
     )
     if (!text) {
-      this.status("didn't catch that")
+      const db = peakDb(pcm)
+      if (db < QUIET_DB) {
+        // Nothing but room noise: the mic is muted, or capture got stuck on silence after the
+        // device changed under it. A fresh capture fixes the second case.
+        this.d.log(`[voice] near-silent press (peak ${db.toFixed(0)} dB), restarting mic capture`)
+        this.mic.restart()
+        this.status("didn't hear you: mic muted? (light under PS button) Restarted the mic.")
+      } else this.status("didn't catch that")
       return
     }
     this.d.toChat({ type: 'heard', text, stt: used, sttMs })
