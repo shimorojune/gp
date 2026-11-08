@@ -105,7 +105,28 @@ describe('HistoryDb', () => {
       wearPerLapPct: 4,
       lapsTo70PctWear: 17,
       paceLossPerLapMs: 100,
+      tyreDegPerLapMs: 154,
+      degConfidence: 'low',
     })
+  })
+
+  it('stint model: runs that get quicker (track evolution) give no deg number', async () => {
+    const { stintModel } = await import('../src/stints.ts')
+    const db = new HistoryDb(':memory:')
+    const run = (step: number, from: number) =>
+      Array.from({ length: 5 }, (_, i) => ({
+        ...lap(from + i, 95000 + i * step),
+        tyre: 'Hard',
+        tyreAge: i + 1,
+        fuelKg: Math.round((11 - i * 1.9) * 10) / 10,
+        wearPct: 2 + (i + 1) * 1.7,
+      }))
+    const laps = [...run(150, 1), ...run(-260, 6)]
+    db.saveSession({ ...record('6', laps), trackId: 9 }, 'y.gprec')
+    const hard = stintModel(db, 9).compounds.find((c) => c.compound === 'Hard')!
+    expect(hard.tyreDegPerLapMs).toBeNull()
+    expect(hard.degConfidence).toBeNull()
+    expect(hard.wearPerLapPct).toBe(1.7)
   })
 
   it('merges a career session saved again under a new game id (app restart)', () => {

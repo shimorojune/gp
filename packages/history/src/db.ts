@@ -414,11 +414,15 @@ export class HistoryDb {
         .prepare('SELECT id, laps_done FROM sessions WHERE uid = ?')
         .get(s.uid) as { id: number; laps_done: number } | undefined
       if (existing && existing.laps_done >= s.laps.length) {
-        // Same session read again: fill in anything older versions didn't store.
+        // Same session read again: the newer reading of tyre, age, fuel and wear wins (older
+        // versions didn't store wear and filed in-laps under the next run's tyre).
         const fill = this.db.prepare(
-          'UPDATE laps SET wear_pct = ? WHERE session_id = ? AND lap = ? AND wear_pct IS NULL',
+          `UPDATE laps SET tyre = COALESCE(?, tyre), tyre_age = COALESCE(?, tyre_age),
+             fuel_kg = COALESCE(?, fuel_kg), wear_pct = COALESCE(?, wear_pct)
+           WHERE session_id = ? AND lap = ? AND lap_ms = ?`,
         )
-        for (const l of s.laps) if (l.wearPct != null) fill.run(l.wearPct, existing.id, l.lap)
+        for (const l of s.laps)
+          fill.run(l.tyre, l.tyreAge, l.fuelKg, l.wearPct ?? null, existing.id, l.lap, l.lapMs)
         return existing.id
       }
       if (existing) this.db.prepare('DELETE FROM sessions WHERE id = ?').run(existing.id)

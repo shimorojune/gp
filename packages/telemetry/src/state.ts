@@ -210,6 +210,12 @@ export interface RaceStateOptions {
 interface CarAccum {
   prevLap: LapData | null
   bestLapMs: number
+  /**
+   * Tyre, age and fuel last seen while the car was out on track. A lap that ends in the pits
+   * or garage completes after the new set is picked, so the values at completion belong to
+   * the next run.
+   */
+  onTrack: { tyreVisual: string | null; tyreAgeLaps: number; fuelKg: number } | null
 }
 
 const HIGH_RATE = new Set([PacketId.Motion, PacketId.LapData, PacketId.CarTelemetry])
@@ -263,7 +269,11 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
     this.history.clear()
     this.tyreSets = null
     this.motionEx = null
-    this.cars = Array.from({ length: NUM_CARS }, () => ({ prevLap: null, bestLapMs: 0 }))
+    this.cars = Array.from({ length: NUM_CARS }, () => ({
+      prevLap: null,
+      bestLapMs: 0,
+      onTrack: null,
+    }))
     this.playerLaps = []
   }
 
@@ -310,6 +320,7 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
         break
       case PacketId.CarStatus:
         this.status = packet.data.cars
+        this.sampleOnTrack()
         break
       case PacketId.CarDamage:
         this.damage = packet.data.cars
@@ -343,6 +354,7 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
         if (valid && (acc.bestLapMs === 0 || lapMs < acc.bestLapMs)) acc.bestLapMs = lapMs
         const isPlayer = i === this.playerIdx
         const st = this.status?.[i]
+        const seen = acc.onTrack
         const completed: CompletedLap = {
           carIdx: i,
           lapNumber: prev.currentLapNum,
@@ -351,15 +363,36 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
           sector2Ms: s2,
           sector3Ms: s1 && s2 ? lapMs - s1 - s2 : 0,
           valid,
-          tyreVisual: st ? (VISUAL_COMPOUNDS[st.visualTyreCompound] ?? null) : null,
-          tyreAgeLaps: st ? st.tyresAgeLaps : null,
-          fuelKg: st ? st.fuelInTank : null,
+          tyreVisual: seen
+            ? seen.tyreVisual
+            : st
+              ? (VISUAL_COMPOUNDS[st.visualTyreCompound] ?? null)
+              : null,
+          tyreAgeLaps: seen ? seen.tyreAgeLaps : st ? st.tyresAgeLaps : null,
+          fuelKg: seen ? seen.fuelKg : st ? st.fuelInTank : null,
           position: cur.carPosition,
           gapAheadMs: cur.deltaToCarInFrontInMS,
           sessionTime: this.sessionTime,
         }
         if (isPlayer) this.playerLaps.push(completed)
         this.emit('lapCompleted', { ...completed, isPlayer })
+      }
+    }
+  }
+
+  private sampleOnTrack(): void {
+    const status = this.status
+    if (!status || !this.lap) return
+    for (let i = 0; i < this.cars.length; i++) {
+      const l = this.lap[i]
+      const st = status[i]
+      if (!l || !st) continue
+      // Out on the road: not in the pit lane and not sitting in the garage.
+      if (l.pitStatus !== 0 || l.driverStatus === 0) continue
+      this.cars[i]!.onTrack = {
+        tyreVisual: VISUAL_COMPOUNDS[st.visualTyreCompound] ?? null,
+        tyreAgeLaps: st.tyresAgeLaps,
+        fuelKg: st.fuelInTank,
       }
     }
   }

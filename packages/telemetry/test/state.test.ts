@@ -38,6 +38,41 @@ describe('RaceState', () => {
     expect(state.snapshot().cars[0]?.bestLapMs).toBe(83456)
   })
 
+  it('files an in-lap under the tyre it was driven on, not the set fitted in the garage', () => {
+    const state = new RaceState({ now: () => 0 })
+    const tyres: (string | null)[] = []
+    const ages: (number | null)[] = []
+    state.on('lapCompleted', (l) => {
+      tyres.push(l.tyreVisual)
+      ages.push(l.tyreAgeLaps)
+    })
+    const lapPacket = (lapNum: number, pitStatus: number, driverStatus: number) => {
+      const b = buildPacket(PacketId.LapData)
+      writeLap(b, 0, { lapNum, position: 1, lastLapMs: lapNum > 1 ? 95000 : 0 })
+      const pk = parsed(b)
+      if (pk.id !== PacketId.LapData) throw new Error('not lap data')
+      pk.data.cars[0]!.pitStatus = pitStatus
+      pk.data.cars[0]!.driverStatus = driverStatus
+      return pk
+    }
+    const statusPacket = (compound: number, age: number) => {
+      const pk = parsed(buildPacket(PacketId.CarStatus))
+      if (pk.id !== PacketId.CarStatus) throw new Error('not status')
+      pk.data.cars[0]!.visualTyreCompound = compound
+      pk.data.cars[0]!.tyresAgeLaps = age
+      return pk
+    }
+    // Out on the road on Hards, age 8.
+    state.ingest(lapPacket(1, 0, 4))
+    state.ingest(statusPacket(18, 8))
+    // Into the garage, new Softs fitted, then the lap counter ticks over.
+    state.ingest(lapPacket(1, 2, 0))
+    state.ingest(statusPacket(16, 0))
+    state.ingest(lapPacket(2, 2, 0))
+    expect(tyres).toEqual(['Hard'])
+    expect(ages).toEqual([8])
+  })
+
   it('does not count invalid laps as best', () => {
     const state = new RaceState({ now: () => 0 })
     const a = buildPacket(PacketId.LapData)

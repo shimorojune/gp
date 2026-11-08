@@ -188,6 +188,7 @@ class SessionAccum {
   readonly bestBySetup = new Map<string, { ms: number; trace: LapTrace }>()
   /** Worst tyre wear from the latest damage packet, %. */
   private tyreWear: number | null = null
+  private onRoad = false
   private lastDamage = 0
   private result: SessionResult | null = null
   private session: Extract<Packet, { id: PacketId.Session }>['data'] | null = null
@@ -244,6 +245,7 @@ class SessionAccum {
           this.trace = newTrace(l.currentLapNum)
         }
         this.lapDistance = l.lapDistance
+        this.onRoad = l.pitStatus === 0 && l.driverStatus !== 0
         break
       }
       case PacketId.CarTelemetry: {
@@ -262,7 +264,8 @@ class SessionAccum {
       case PacketId.CarDamage: {
         const d = p.data.cars[this.playerIdx]
         if (!d) break
-        this.tyreWear = Math.max(...d.tyresWear)
+        // Only out on the road: a new set fitted in the pits isn't the wear of the lap just run.
+        if (this.onRoad) this.tyreWear = Math.max(...d.tyresWear)
         const worst = Math.max(
           d.frontLeftWingDamage,
           d.frontRightWingDamage,

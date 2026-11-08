@@ -125,7 +125,8 @@ export function stintModel(
     const clean = st.filter((l) => l.valid && l.lap_ms > 0 && l.tyre_age !== null)
     const best = Math.min(...clean.map((l) => l.lap_ms))
     const quick = clean.filter((l) => l.lap_ms <= best * 1.03)
-    if (quick.length >= 3) {
+    // 5+ laps: over shorter runs track evolution and his own learning swamp the tyre.
+    if (quick.length >= 5) {
       const ps = slope(quick.map((l) => [l.tyre_age!, l.lap_ms]))
       if (ps !== null) c.pace.push(ps)
     }
@@ -138,6 +139,11 @@ export function stintModel(
   const compounds = [...byCompound.entries()].map(([tyre, c]) => {
     const wear = median(c.wear)
     const pace = c.pace.length ? median(c.pace)! : null
+    // Per-run tyre cost. A tyre doesn't get quicker with age: a negative or contradicting
+    // reading means the track was still coming to him, so the number is unknown.
+    const degs = c.pace.map((p) => p + fuelGainMs)
+    const agree = degs.length > 0 && degs.every((d) => d > 0)
+    const deg = agree ? median(degs)! : null
     return {
       compound: tyre,
       lapsRun: c.laps,
@@ -145,7 +151,14 @@ export function stintModel(
       wearPerLapPct: r1(wear),
       lapsTo70PctWear: wear ? Math.floor(70 / wear) : null,
       paceLossPerLapMs: pace === null ? null : Math.round(pace),
-      tyreDegPerLapMs: pace === null ? null : Math.round(pace + fuelGainMs),
+      tyreDegPerLapMs: deg === null ? null : Math.round(deg),
+      degConfidence: deg === null ? null : degs.length >= 2 ? 'medium' : 'low',
+      ...(degs.length && deg === null
+        ? {
+            degNote:
+              'Runs on this tyre got quicker or disagreed (track still improving): deg unknown.',
+          }
+        : {}),
     }
   })
   return {
@@ -155,7 +168,7 @@ export function stintModel(
     compounds,
     note:
       compounds.length || burn
-        ? 'From his own laps. Wear per lap and pace loss come from stints of 3+ laps; a short practice run on a compound makes its numbers rough, and null means unknown. paceLossPerLapMs is what the stopwatch showed; tyreDegPerLapMs adds back the fuel burn-off (~30 ms per kg), i.e. what the tyre alone costs per lap.'
+        ? 'From his own laps. Wear per lap comes from stints of 3+ laps, pace loss and deg from runs with 5+ quick laps; a short practice run on a compound makes its numbers rough, and null means unknown. paceLossPerLapMs is what the stopwatch showed; tyreDegPerLapMs adds back the fuel burn-off (~30 ms per kg), i.e. what the tyre alone costs per lap; degConfidence low = one run, medium = 2+ runs that agree.'
         : 'No usable practice runs here yet: do a run of 5+ laps on each race compound to learn wear, pace drop and fuel use.',
   }
 }
