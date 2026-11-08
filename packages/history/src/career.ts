@@ -1,4 +1,5 @@
 import type { HistoryDb } from './db.ts'
+import { seasonTeamPace } from './team.ts'
 
 const QUALI = ['Q1', 'Q2', 'Q3', 'Short Qualifying', 'One-Shot Qualifying']
 const RACE = ['Race', 'Race 2', 'Race 3']
@@ -131,6 +132,7 @@ export function careerView(db: HistoryDb, seasonLink?: number) {
         ),
       },
     },
+    teamPace: seasonTeamPace(db, season, latest?.team ?? null),
     standings: {
       note: 'Only races the app recorded count.',
       driverPosition: myPos >= 0 ? myPos + 1 : null,
@@ -149,5 +151,8 @@ export function careerBrief(db: HistoryDb, seasonLink: number): string | null {
   const mate = c.teammate
     ? ` vs ${c.teammate}: quali ${t.headToHead.quali}, race ${t.headToHead.race}, points ${t.points}-${t.teammatePoints}.`
     : ''
-  return `Career season with ${c.team ?? 'his team'}: ${c.rounds.length} round(s) so far, ${t.points} pts${c.standings.driverPosition ? `, P${c.standings.driverPosition} in the standings` : ''}, ${t.wins} win(s), ${t.podiums} podium(s).${mate}`
+  const pace = c.teamPace.myTeam
+    ? ` Car: ${c.teamPace.myTeam.expectation} (from ${c.teamPace.sessionsMeasured} session(s)).`
+    : ''
+  return `Career season with ${c.team ?? 'his team'}: ${c.rounds.length} round(s) so far, ${t.points} pts${c.standings.driverPosition ? `, P${c.standings.driverPosition} in the standings` : ''}, ${t.wins} win(s), ${t.podiums} podium(s).${mate}${pace}`
 }

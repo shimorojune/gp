@@ -7,8 +7,10 @@ import {
   careerBrief,
   careerView,
   cornerReport,
+  expectedRange,
   lapVsHistory,
   pbTrace,
+  rankTeams,
   recentSessionsView,
   sessionDetailView,
   setupHistory,
@@ -16,7 +18,7 @@ import {
   trackBrief,
   trackRecall,
 } from '@gp/history'
-import { CAREER_GAME_MODES, type RaceSnapshot, type RaceState, TRACKS } from '@gp/telemetry'
+import { CAREER_GAME_MODES, type RaceSnapshot, type RaceState, TEAMS, TRACKS } from '@gp/telemetry'
 import { z } from 'zod'
 import { setupGuide } from './setup-guide.ts'
 
@@ -155,6 +157,38 @@ export function historyTools(
       "His career-mode season so far (career sessions only, never sim): team, teammate, every round's qualifying and race result next to the teammate's, points, wins, podiums, head-to-head, and championship standings from the races recorded.",
       {},
       async () => json(careerView(history) ?? { note: 'no career sessions recorded yet' }),
+      readOnly,
+    ),
+    tool(
+      'get_team_pace',
+      "How quick his car is compared with the other teams: this session's team ranking by each team's quicker car's best lap (live), and in career mode the season average and constructors' standings. Use it to set realistic expectations: a midfield car's natural finishing range, not the race win.",
+      {},
+      async () => {
+        const s = snapshot()
+        const me = s.cars.find((c) => c.isPlayer)
+        const team = (id: number) => TEAMS[id] ?? `team ${id}`
+        const ranked = rankTeams(
+          s.cars.map((c) => ({ team: team(c.teamId), bestLapMs: c.bestLapMs })),
+        )
+        const mine = me ? ranked.find((r) => r.team === team(me.teamId)) : undefined
+        const career = s.session && CAREER_GAME_MODES.has(s.session.gameMode)
+        return json({
+          thisSession: ranked.length
+            ? {
+                myTeam: mine
+                  ? {
+                      ...mine,
+                      of: ranked.length,
+                      expectation: expectedRange(mine.rank, ranked.length),
+                    }
+                  : 'no lap from his team yet',
+                ranking: ranked.map((r) => `${r.rank}. ${r.team} +${r.gapPct}%`),
+                note: 'One session only; fuel loads and tyres differ in practice, so treat it as rough.',
+              }
+            : 'no laps set yet this session',
+          season: career ? (careerView(history, s.session!.seasonLink)?.teamPace ?? null) : null,
+        })
+      },
       readOnly,
     ),
     tool(
