@@ -17,6 +17,10 @@ const bridge: GpBridge = {
   onAudio(cb) {
     ipcRenderer.on(IPC.audio, (_e, m: AudioMessage) => cb(m))
   },
+  notes: () => ipcRenderer.invoke(IPC.notesGet),
+  saveProfile: (text) => ipcRenderer.invoke(IPC.profileSave, text),
+  addNote: (note) => ipcRenderer.invoke(IPC.noteAdd, note),
+  removeNote: (id) => ipcRenderer.invoke(IPC.noteRemove, id),
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)

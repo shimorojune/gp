@@ -9,7 +9,37 @@ export const IPC = {
   chatEvent: 'gp:chat-event',
   chatHide: 'gp:chat-hide',
   audio: 'gp:audio',
+  notesGet: 'gp:notes-get',
+  profileSave: 'gp:profile-save',
+  noteAdd: 'gp:note-add',
+  noteRemove: 'gp:note-remove',
 } as const
+
+export interface NoteItem {
+  id: string
+  category: string
+  track: string | null
+  text: string
+  source: string
+}
+
+export interface SessionItem {
+  date: string
+  program: string
+  track: string
+  type: string
+  mode: string
+  best: string | null
+  result: string | null
+  summary: string | null
+}
+
+/** Everything the notes tab shows. */
+export interface NotesData {
+  profile: { text: string; updatedAt: string; editedBy: string } | null
+  notes: NoteItem[]
+  sessions: SessionItem[]
+}
 
 /** Speech for the dashboard window to play (it owns the Web Audio radio chain). */
 export type AudioMessage =
@@ -66,6 +96,10 @@ export interface GpBridge {
   toggleRecording(): Promise<RecordingState>
   toggleOnTop(): Promise<boolean>
   onAudio(cb: (m: AudioMessage) => void): void
+  notes(): Promise<NotesData>
+  saveProfile(text: string): Promise<NotesData>
+  addNote(note: { category: string; text: string; track?: string }): Promise<NotesData>
+  removeNote(id: string): Promise<NotesData>
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */

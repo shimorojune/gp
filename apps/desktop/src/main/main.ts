@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   EngineerSession,
+  type NoteCategory,
   NotesStore,
   attachHistory,
   attachRadio,
@@ -13,6 +14,7 @@ import {
   backfill,
   ingestRecording,
   pruneRecordings,
+  recentSessionsView,
 } from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
@@ -21,6 +23,7 @@ import {
   type AudioMessage,
   type ChatEvent,
   IPC,
+  type NotesData,
   type RecordingState,
   type SnapshotMessage,
 } from '../ipc.ts'
@@ -50,11 +53,12 @@ let writerPath: string | null = null
 let win: BrowserWindow | null = null
 let chatWin: BrowserWindow | null = null
 
+const notes = new NotesStore(join(GP_HOME, 'notes.json'))
 const engineerCwd = join(GP_HOME, 'engineer')
 mkdirSync(engineerCwd, { recursive: true })
 const engineer = new EngineerSession({
   snapshot: () => state.snapshot(),
-  notes: new NotesStore(join(GP_HOME, 'notes.json')),
+  notes,
   history,
   liveBest: () => live.liveBest(),
   liveLaps: () => live.live(),
@@ -296,6 +300,48 @@ app.whenReady().then(async () => {
   console.log(
     `[env] ${envFile ?? `no ${join(GP_HOME, '.env')} (no API keys: whisper + Mac voice)`}`,
   )
+
+  // Notes tab: GP's profile of him, his notes, recent sessions. Edits reach GP as [context].
+  const notesData = (): NotesData => ({
+    profile: history.profile(),
+    notes: notes.all().map(({ id, category, track, text, source }) => ({
+      id,
+      category,
+      track,
+      text,
+      source,
+    })),
+    sessions: recentSessionsView(history, 15).map((r) => ({
+      date: String(r.date),
+      program: String(r.program),
+      track: String(r.track),
+      type: String(r.type),
+      mode: String(r.mode),
+      best: (r.best as string | null) ?? null,
+      result: (r.result as string | null) ?? null,
+      summary: (r.summary as string | null) ?? null,
+    })),
+  })
+  ipcMain.handle(IPC.notesGet, () => notesData())
+  ipcMain.handle(IPC.profileSave, (_e, text: string) => {
+    history.setProfile(text, 'driver')
+    engineer.addContext(`The driver edited your profile of him. It now reads: ${text.trim()}`)
+    return notesData()
+  })
+  ipcMain.handle(IPC.noteAdd, (_e, n: { category: NoteCategory; text: string; track?: string }) => {
+    const note = notes.add({
+      category: n.category,
+      text: n.text,
+      source: 'driver',
+      track: n.track ?? null,
+    })
+    engineer.addContext(`He added a note for you to remember (id ${note.id}): ${note.text}`)
+    return notesData()
+  })
+  ipcMain.handle(IPC.noteRemove, (_e, id: string) => {
+    if (notes.remove(id)) engineer.addContext(`He deleted note ${id}; forget it.`)
+    return notesData()
+  })
 
   ipcMain.handle(IPC.toggleRecording, () => toggleRecording())
   ipcMain.handle(IPC.toggleOnTop, () => {

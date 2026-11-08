@@ -1,5 +1,5 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
-import type { GpBridge, SnapshotMessage } from '../ipc.ts'
+import type { GpBridge, NotesData, SnapshotMessage } from '../ipc.ts'
 import { RadioPlayer } from './audio.ts'
 
 declare global {
@@ -100,3 +100,57 @@ $('ontop').addEventListener('click', async () => {
 
 const player = new RadioPlayer()
 window.gp.onAudio((m) => player.handle(m))
+
+// ---------------------------------------------------------------- notes tab
+
+function renderNotes(d: NotesData): void {
+  const profile = $('profile') as HTMLTextAreaElement
+  if (document.activeElement !== profile) profile.value = d.profile?.text ?? ''
+  $('profileMeta').textContent = d.profile
+    ? `Last updated ${d.profile.updatedAt.slice(0, 16).replace('T', ' ')} by ${d.profile.editedBy === 'driver' ? 'you' : 'GP'}`
+    : ''
+  $('notesList').innerHTML = d.notes.length
+    ? d.notes
+        .map(
+          (n) =>
+            `<div class="note"><span class="k">${esc(n.category)}${n.track ? `: ${esc(n.track)}` : ''}</span><span class="t">${esc(n.text)}${n.source === 'engineer' ? ' <span class="muted">(GP)</span>' : ''}</span><button data-id="${esc(n.id)}">x</button></div>`,
+        )
+        .join('')
+    : 'Nothing yet.'
+  $('sessions').innerHTML = d.sessions.length
+    ? d.sessions
+        .map(
+          (x) =>
+            `<div class="sess"><div>${esc(x.date)} · ${esc(x.track)} ${esc(x.type)} <span class="muted">(${x.program === 'career' ? 'career' : 'sim'}, ${esc(x.mode)})</span> · best ${esc(x.best ?? '-')}${x.result ? ` · ${esc(x.result)}` : ''}</div>${x.summary ? `<div class="muted">${esc(x.summary)}</div>` : ''}</div>`,
+        )
+        .join('')
+    : 'No sessions yet.'
+}
+
+let notesOpen = false
+$('tab').addEventListener('click', async () => {
+  notesOpen = !notesOpen
+  $('notesView').classList.toggle('hidden', !notesOpen)
+  $('raceView').classList.toggle('hidden', notesOpen)
+  $('tab').textContent = notesOpen ? 'Race' : 'Notes'
+  if (notesOpen) renderNotes(await window.gp.notes())
+})
+$('profileSave').addEventListener('click', async () => {
+  renderNotes(await window.gp.saveProfile(($('profile') as HTMLTextAreaElement).value))
+  $('profileSaved').textContent = 'Saved'
+  setTimeout(() => {
+    $('profileSaved').textContent = ''
+  }, 2000)
+})
+$('noteAdd').addEventListener('click', async () => {
+  const text = ($('noteText') as HTMLInputElement).value.trim()
+  if (!text) return
+  const category = ($('noteCat') as HTMLSelectElement).value
+  const track = ($('noteTrack') as HTMLInputElement).value.trim()
+  renderNotes(await window.gp.addNote({ category, text, ...(track ? { track } : {}) }))
+  ;($('noteText') as HTMLInputElement).value = ''
+})
+$('notesList').addEventListener('click', async (e) => {
+  const id = (e.target as HTMLElement).dataset.id
+  if (id) renderNotes(await window.gp.removeNote(id))
+})
