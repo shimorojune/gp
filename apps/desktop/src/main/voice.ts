@@ -54,6 +54,7 @@ interface SpeakOptions {
 export class RadioVoice {
   readonly ptt = new DualSensePtt()
   readonly mic = new Mic()
+  private readonly ttsSlots = new Slots(4)
   private readonly stt: Stt
   private readonly fallbackStt: WhisperStt
   private readonly tts: Tts | null
@@ -328,15 +329,38 @@ export class RadioVoice {
     signal.addEventListener('abort', cut, { once: true })
     const t0 = performance.now()
     const short = plain.length > 40 ? `${plain.slice(0, 40)}...` : plain
-    const synth = () =>
-      this.tts!.synth(clean, own.signal, { expressive, previousText }).catch((e: Error) => {
-        if (!own.signal.aborted) this.d.log(`[tts] error: ${e.message}`)
-        return null
-      })
+    // ElevenLabs allows 6 requests at once on this plan; a long answer used to start one per
+    // sentence and get 429s. Each sentence holds a slot until its audio is played or dropped.
+    const slot = this.ttsSlots.acquire(own.signal)
+    let released = false
+    const release = () => {
+      if (released) return
+      released = true
+      void slot.then((ok) => ok && this.ttsSlots.release())
+    }
+    own.signal.addEventListener('abort', release, { once: true })
+    const synth = async () => {
+      if (!(await slot)) return null
+      for (let tries = 0; ; tries++) {
+        try {
+          return await this.tts!.synth(clean, own.signal, { expressive, previousText })
+        } catch (e) {
+          const msg = (e as Error).message
+          // Too many at once: wait our turn rather than switch voices mid-answer.
+          if (/429|concurrent/i.test(msg) && tries < 3 && !own.signal.aborted) {
+            await new Promise((r) => setTimeout(r, 400 * (tries + 1)))
+            continue
+          }
+          if (!own.signal.aborted) this.d.log(`[tts] error: ${msg}`)
+          return null
+        }
+      }
+    }
     const audio = synth()
     this.speakChain = this.speakChain.then(async () => {
       const held = performance.now()
       if (!(await gate())) {
+        release()
         own.abort()
         if (!signal.aborted) this.d.log(`[gate] dropped, no straight in time: "${short}"`)
         return
@@ -383,6 +407,7 @@ export class RadioVoice {
       } finally {
         clearTimeout(timer)
         signal.removeEventListener('abort', cut)
+        release()
       }
     })
   }
@@ -407,3 +432,39 @@ export class RadioVoice {
 }
 
 const macVoice = () => (process.env.GP_MAC_VOICE ? { voice: process.env.GP_MAC_VOICE } : {})
+
+/** A FIFO counting semaphore; waiting is abandoned when the signal aborts. */
+class Slots {
+  private free: number
+  private waiting: { resolve: (ok: boolean) => void; signal: AbortSignal }[] = []
+  constructor(n: number) {
+    this.free = n
+  }
+  acquire(signal: AbortSignal): Promise<boolean> {
+    if (signal.aborted) return Promise.resolve(false)
+    if (this.free > 0) {
+      this.free--
+      return Promise.resolve(true)
+    }
+    return new Promise((resolve) => {
+      const w = { resolve, signal }
+      this.waiting.push(w)
+      signal.addEventListener(
+        'abort',
+        () => {
+          const i = this.waiting.indexOf(w)
+          if (i >= 0) {
+            this.waiting.splice(i, 1)
+            resolve(false)
+          }
+        },
+        { once: true },
+      )
+    })
+  }
+  release(): void {
+    const next = this.waiting.shift()
+    if (next) next.resolve(true)
+    else this.free++
+  }
+}

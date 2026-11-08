@@ -62,8 +62,7 @@ export class RadioPlayer {
         this.enqueue(m.pcm, m.sampleRate)
         break
       case 'say':
-        console.log(`[audio] mac voice: "${m.text.slice(0, 40)}"`)
-        this.say(m.text, m.voice)
+        this.sayInTurn(m.text, m.voice)
         break
       case 'end':
         if (this.openUtt === m.utt) {
@@ -147,6 +146,27 @@ export class RadioPlayer {
     osc.stop(ctx.currentTime + 0.09)
   }
 
+  private sayTimers = new Set<ReturnType<typeof setTimeout>>()
+
+  /**
+   * The Mac voice is the fallback for a sentence ElevenLabs failed on. It plays outside the
+   * audio graph, so wait for the queued ElevenLabs audio to finish, and hold later audio back
+   * while it speaks, or the two talk over each other.
+   */
+  private sayInTurn(text: string, preferred?: string): void {
+    const ctx = this.ensure()
+    const startAt = Math.max(this.playAt, ctx.currentTime)
+    const waitMs = Math.max(0, (startAt - ctx.currentTime) * 1000)
+    // ~15 characters a second at rate 1.05, plus a breath.
+    this.playAt = startAt + text.length / 15 + 0.3
+    console.log(`[audio] mac voice in ${Math.round(waitMs)}ms: "${text.slice(0, 40)}"`)
+    const timer = setTimeout(() => {
+      this.sayTimers.delete(timer)
+      this.say(text, preferred)
+    }, waitMs)
+    this.sayTimers.add(timer)
+  }
+
   private say(text: string, preferred?: string): void {
     const u = new SpeechSynthesisUtterance(text)
     const voices = speechSynthesis.getVoices()
@@ -170,6 +190,8 @@ export class RadioPlayer {
       } catch {}
     }
     this.sources.clear()
+    for (const t of this.sayTimers) clearTimeout(t)
+    this.sayTimers.clear()
     speechSynthesis.cancel()
     this.openUtt = null
     if (this.ctx) this.playAt = this.ctx.currentTime
