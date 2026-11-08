@@ -1,7 +1,10 @@
+import { join } from 'node:path'
 import type { EngineerSession, Reply } from '@gp/engineer'
 import { type RaceState, isDriving } from '@gp/telemetry'
 import {
+  CachedTts,
   CornerGate,
+  DEFAULT_VOICE_ID,
   DeepgramStt,
   DualSensePtt,
   ElevenLabsTts,
@@ -17,6 +20,7 @@ import {
   firstNamesFor,
   fixDriverNames,
   fixRadioPhrases,
+  gpHome,
   peakDb,
   plainSpeech,
 } from '@gp/voice'
@@ -41,6 +45,9 @@ const STRAIGHT_WAIT_MS = 10_000
 // He just asked and is waiting: hold for a straight only briefly. A 9 s hold looked like
 // silence, he pressed again, and the cut-off threw the unheard answer away.
 const ANSWER_WAIT_MS = 1_500
+// Off track, long answers are read on screen; only the first few sentences are spoken.
+// Long garage answers were the biggest ElevenLabs cost. 0 = speak everything.
+const OFFTRACK_SPOKEN = Number(process.env.GP_OFFTRACK_SPOKEN_SENTENCES ?? 3)
 
 interface SpeakOptions {
   /** Emergencies talk through corners. */
@@ -59,7 +66,9 @@ interface SpeakOptions {
 export class RadioVoice {
   readonly ptt = new DualSensePtt()
   readonly mic = new Mic()
-  private readonly ttsSlots = new Slots(4)
+  // One sentence playing, one being fetched: enough to stay ahead, and when he cuts in the
+  // rest of a long answer was never paid for.
+  private readonly ttsSlots = new Slots(2)
   private readonly stt: Stt
   private readonly fallbackStt: WhisperStt
   private readonly tts: Tts | null
@@ -86,7 +95,18 @@ export class RadioVoice {
     const dg = process.env.DEEPGRAM_API_KEY
     this.stt = dg ? new DeepgramStt(dg) : this.fallbackStt
     const el = process.env.ELEVENLABS_API_KEY
-    this.tts = el ? new ElevenLabsTts(el) : null
+    // Short repeated lines replay from disk instead of costing credits again.
+    const variant = [
+      process.env.GP_VOICE_ID ?? DEFAULT_VOICE_ID,
+      process.env.GP_TTS_MODEL ?? 'eleven_flash_v2_5',
+      process.env.GP_TTS_STABILITY,
+      process.env.GP_TTS_SIMILARITY,
+      process.env.GP_TTS_STYLE,
+      process.env.GP_TTS_SPEED,
+    ].join('|')
+    this.tts = el
+      ? new CachedTts(new ElevenLabsTts(el), join(gpHome(), 'tts-cache'), variant)
+      : null
   }
 
   start(): void {
@@ -141,14 +161,20 @@ export class RadioVoice {
         this.answering = this.utt
         this.d.log(`[voice] speaking answer #${id} as utterance ${this.utt}`)
       }
-      for (const sentence of sp.push(text)) this.speak(sentence, { maxWaitMs: ANSWER_WAIT_MS })
+      for (const sentence of sp.push(text)) this.speakAnswer(id, sentence)
     })
     this.d.engineer.on('reply', (r: Reply) => {
       if (r.kind !== 'ask' || r.id <= this.mutedThrough) return
       const sp = this.splitters.get(r.id)
       this.splitters.delete(r.id)
       const rest = sp?.flush()
-      if (rest) this.speak(rest, { maxWaitMs: ANSWER_WAIT_MS })
+      if (rest) this.speakAnswer(r.id, rest)
+      const n = this.spokenCount.get(r.id) ?? 0
+      if (n > OFFTRACK_SPOKEN && OFFTRACK_SPOKEN > 0)
+        this.d.log(
+          `[voice] answer #${r.id}: spoke ${OFFTRACK_SPOKEN} of ${n} sentences (rest on screen)`,
+        )
+      this.spokenCount.delete(r.id)
       this.endUtterance()
     })
   }
@@ -415,6 +441,15 @@ export class RadioVoice {
         release()
       }
     })
+  }
+
+  private spokenCount = new Map<number, number>()
+
+  private speakAnswer(id: number, sentence: string): void {
+    const n = (this.spokenCount.get(id) ?? 0) + 1
+    this.spokenCount.set(id, n)
+    if (OFFTRACK_SPOKEN > 0 && n > OFFTRACK_SPOKEN && !isDriving(this.d.state.snapshot())) return
+    this.speak(sentence, { maxWaitMs: ANSWER_WAIT_MS })
   }
 
   private stopSpeaking(): void {
