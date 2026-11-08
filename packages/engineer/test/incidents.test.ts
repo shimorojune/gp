@@ -22,8 +22,8 @@ describe('IncidentDetector', () => {
   it('ignores normal driving and hard braking', () => {
     const d = new IncidentDetector()
     const out: string[] = []
-    // 300 -> 220 kph in 400 ms is a big stop, still braking.
-    for (let t = 0, v = 300; t <= 400; t += 100, v -= 20)
+    // 300 -> 240 kph in 400 ms: harder than the hardest braking seen (51 kph).
+    for (let t = 0, v = 300; t <= 400; t += 100, v -= 15)
       out.push(...d.update({ t, speedKph: v, localVx: 0.5, localVz: v / 3.6, damage: dmg() }))
     expect(out).toEqual([])
   })
@@ -39,5 +39,82 @@ describe('IncidentDetector', () => {
     d.contact(50, 'NORRIS')
     const out = d.update({ t: 100, speedKph: 150, localVx: 0, localVz: 42, damage: dmg(12) })
     expect(out[0]).toMatch(/Contact with NORRIS.*front wing \(left\) 12%/)
+  })
+})
+
+describe('IncidentDetector patterns', () => {
+  it('names the spot, the inputs before it, and repeats there', () => {
+    const d = new IncidentDetector((m) => (Math.abs(m - 1200) < 250 ? 'corner 4' : null))
+    const spin = (t0: number) => {
+      const out: string[] = []
+      out.push(
+        ...d.update({
+          t: t0,
+          speedKph: 90,
+          localVx: 0,
+          localVz: 25,
+          damage: dmg(),
+          lapDistanceM: 1180,
+          throttle: 1,
+          brake: 0,
+          gear: 3,
+        }),
+      )
+      for (let t = t0 + 100; t <= t0 + 400; t += 100)
+        out.push(
+          ...d.update({
+            t,
+            speedKph: 72,
+            localVx: 18,
+            localVz: 5,
+            damage: dmg(),
+            lapDistanceM: 1200,
+            throttle: 1,
+            brake: 0,
+            gear: 3,
+          }),
+        )
+      return out
+    }
+    const first = spin(0)
+    expect(first[0]).toMatch(
+      /corner 4, 1180 m into the lap \(throttle 100%, brake 0%, gear 3 just before\)/,
+    )
+    expect(first[0]).not.toMatch(/pattern/)
+    const second = spin(90_000)
+    expect(second[0]).toMatch(/Second incident at this spot this session: a pattern/)
+  })
+})
+
+describe('IncidentDetector edge cases', () => {
+  it('ignores a flashback teleport', () => {
+    const d = new IncidentDetector()
+    d.update({ t: 0, speedKph: 209, localVx: 0, localVz: 58, damage: dmg(), lapDistanceM: 3792 })
+    const out = d.update({
+      t: 100,
+      speedKph: 77,
+      localVx: 0,
+      localVz: 21,
+      damage: dmg(),
+      lapDistanceM: 253,
+    })
+    expect(out).toEqual([])
+  })
+  it('calls a stop on track mid-lap', () => {
+    const d = new IncidentDetector()
+    const out: string[] = []
+    for (let t = 0, v = 60; t <= 1200; t += 100, v = Math.max(0, v - 6))
+      out.push(
+        ...d.update({
+          t,
+          speedKph: v,
+          localVx: 0,
+          localVz: v / 3.6,
+          damage: dmg(),
+          lapDistanceM: 1000 + t / 100,
+          onLap: true,
+        }),
+      )
+    expect(out[0]).toMatch(/stopped on track/)
   })
 })

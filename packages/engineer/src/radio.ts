@@ -33,6 +33,8 @@ export interface RadioOptions {
   now?: () => number
   /** Extra text for the player's lap event, e.g. "New personal best at this track". */
   lapNote?: (lap: { lapTimeMs: number; valid: boolean }) => string | null
+  /** Names a spot on the lap ("corner 4") for incident calls. */
+  locate?: (lapDistanceM: number) => string | null
 }
 
 interface Queued {
@@ -172,7 +174,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   }, pollMs)
 
   // Spins and impacts, from the player's own car at ~10 Hz.
-  const incidents = new IncidentDetector()
+  const incidents = new IncidentDetector(opts.locate)
   const incidentPoll = setInterval(() => {
     if (closed) return
     const s = state.snapshot()
@@ -185,6 +187,14 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       localVx: mx?.localVelocityX ?? null,
       localVz: mx?.localVelocityZ ?? null,
       damage: s.player?.damage ?? null,
+      lapDistanceM: s.cars.find((c) => c.isPlayer)?.lapDistanceM,
+      throttle: inputs.throttle,
+      brake: inputs.brake,
+      gear: s.player?.gear,
+      onLap: (() => {
+        const me = s.cars.find((c) => c.isPlayer)
+        return !!me && me.driverStatus > 0 && me.pitStatus === 0
+      })(),
     }))
       push(line, 'urgent')
   }, 100)

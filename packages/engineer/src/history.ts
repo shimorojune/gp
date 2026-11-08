@@ -8,6 +8,7 @@ import {
   careerView,
   cornerReport,
   expectedRange,
+  findCorners,
   lapVsHistory,
   pbTrace,
   rankTeams,
@@ -204,6 +205,8 @@ export function historyTools(
 export interface HistoryHooks {
   /** Extra text for a lap-completed event: new PB at this track, close to it. */
   lapNote: (lap: { lapTimeMs: number; valid: boolean }) => string | null
+  /** "corner 4", numbered like get_corner_comparison, from his best trace at this track. */
+  locate: (lapDistanceM: number) => string | null
   stop: () => void
 }
 
@@ -227,6 +230,7 @@ export function attachHistory(
   let briefedUid: string | null = null
   let weekend: number | null = null
   let sessionBest = 0
+  let corners: { trackId: number; atM: number[] } | null = null
   const timer = setInterval(() => {
     const s = state.snapshot().session
     if (!s || s.uid === briefedUid) return
@@ -261,6 +265,30 @@ export function attachHistory(
         if (lap.valid && lap.lapTimeMs > 0 && (!sessionBest || lap.lapTimeMs < sessionBest))
           sessionBest = lap.lapTimeMs
         return [note, setupNote()].filter(Boolean).join(' ') || null
+      } catch {
+        return null
+      }
+    },
+    locate: (d) => {
+      const trackId = state.snapshot().session?.trackId
+      if (trackId === undefined) return null
+      try {
+        if (corners?.trackId !== trackId) {
+          const pb = pbTrace(history, trackId)
+          corners = {
+            trackId,
+            atM: pb ? findCorners(pb.trace).map((i) => i * pb.trace.binM) : [],
+          }
+        }
+        let best = -1
+        corners.atM.forEach((m, i) => {
+          if (
+            Math.abs(m - d) < 250 &&
+            (best < 0 || Math.abs(m - d) < Math.abs(corners!.atM[best]! - d))
+          )
+            best = i
+        })
+        return best >= 0 ? `corner ${best + 1}` : null
       } catch {
         return null
       }

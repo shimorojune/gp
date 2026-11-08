@@ -6,6 +6,11 @@ import type { EngineerSession, Reply } from '../src/session.ts'
 
 class FakeState extends TypedEmitter<Record<string, unknown>> {
   position = 7
+  latestMotionEx = null
+  playerCarIndex = 0
+  playerInputs() {
+    return { throttle: 1, brake: 0, steer: 0, speedKph: 200 }
+  }
   fire(name: string, payload: unknown) {
     this.emit(name, payload)
   }
