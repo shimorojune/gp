@@ -1,5 +1,5 @@
 import type { EngineerSession, Reply } from '@gp/engineer'
-import type { RaceState } from '@gp/telemetry'
+import { type RaceState, isDriving } from '@gp/telemetry'
 import {
   CornerGate,
   DeepgramStt,
@@ -116,7 +116,7 @@ export class RadioVoice {
     this.ptt.start()
     this.gateTimer = setInterval(() => {
       const snap = this.d.state.snapshot()
-      const live = snap.status === 'live'
+      const live = isDriving(snap)
       // Pit lane: speed-limited, no corners worth protecting.
       const inPits = !!snap.cars.find((c) => c.isPlayer)?.pitStatus
       const straight = this.gate.update(this.d.state.playerInputs())
@@ -248,7 +248,7 @@ export class RadioVoice {
       return
     }
     this.d.toChat({ type: 'heard', text, stt: used, sttMs })
-    const live = this.d.state.snapshot().status === 'live'
+    const live = isDriving(this.d.state.snapshot())
     // On track, speed beats depth: Haiku answers in ~1.5-2s vs ~4.5s for Sonnet (Mac test).
     const model = live ? (process.env.GP_LIVE_MODEL ?? 'haiku') : undefined
     try {
@@ -318,8 +318,7 @@ export class RadioVoice {
     }
     // Start the request now so it's ready when the previous sentence finishes.
     // Eleven v3 (audio tags) is opt-in and off track only: ~6s a line is too slow for radio.
-    const expressive =
-      this.d.state.snapshot().status !== 'live' && process.env.GP_TTS_EXPRESSIVE === '1'
+    const expressive = !isDriving(this.d.state.snapshot()) && process.env.GP_TTS_EXPRESSIVE === '1'
     const previousText = this.prevSentence
     this.prevSentence = clean
     // Each sentence gets its own abort, tied to the cut-off signal, so a stalled ElevenLabs

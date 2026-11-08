@@ -11,6 +11,7 @@ import {
   type RaceSnapshot,
   TEAMS,
   VISUAL_COMPOUNDS,
+  inGarage,
 } from '@gp/telemetry'
 
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -41,7 +42,7 @@ export function situation(s: RaceSnapshot) {
   const me = s.cars.find((c) => c.isPlayer)
   const sess = s.session
   return {
-    status: s.status,
+    status: inGarage(s) ? 'garage' : s.status,
     track: sess?.track ?? null,
     session: sess?.sessionType ?? null,
     lap: me ? me.currentLap : null,

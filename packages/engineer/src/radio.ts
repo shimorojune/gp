@@ -1,5 +1,11 @@
 import { formatLapTime } from '@gp/shared'
-import { INFRINGEMENT_TYPES, PENALTY_TYPES, type RaceState } from '@gp/telemetry'
+import {
+  INFRINGEMENT_TYPES,
+  PENALTY_TYPES,
+  type RaceState,
+  inGarage,
+  isDriving,
+} from '@gp/telemetry'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 
@@ -83,9 +89,9 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
         schedule()
       })
   }
-  const push = (text: string, kind: Queued['kind'] = 'other') => {
-    // Nothing to say on the radio in menus or while paused.
-    if (state.snapshot().status !== 'live') return
+  const push = (text: string, kind: Queued['kind'] = 'other', force = false) => {
+    // Nothing to say on the radio in menus, while paused or sitting in the garage.
+    if (!force && !isDriving(state.snapshot())) return
     // A newer position supersedes an older one that hasn't gone out yet.
     if (kind === 'position') queued = queued.filter((q) => q.kind !== 'position')
     queued.push({ text, kind })
@@ -102,9 +108,16 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   let reported: number | null = null
   let pending: { pos: number; since: number } | null = null
   let safetyCar: string | null = null
+  let garage: boolean | null = null
   const poll = setInterval(() => {
     if (closed) return
     const s = state.snapshot()
+    // Back from a run in practice or quali: a chance to debrief it before the next one.
+    const g = inGarage(s)
+    if (s.status === 'live') {
+      if (garage === false && g) push('Back in the garage after his run.', 'other', true)
+      garage = g
+    }
     const sc = s.session?.safetyCar ?? null
     if (s.status === 'live' && sc && sc !== safetyCar) {
       if (safetyCar !== null)
@@ -112,7 +125,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       safetyCar = sc
     }
     const me = s.cars.find((c) => c.isPlayer)
-    if (s.status !== 'live' || !me?.position) return
+    if (!isDriving(s) || !me?.position) return
     // In the pit lane places come and go; judge it once he's back out.
     if (me.pitStatus) return
     const pos = me.position

@@ -162,6 +162,22 @@ export interface RaceSnapshot {
   packetsPerSecond: number
 }
 
+/**
+ * The player is sitting in the garage. In practice and qualifying the game keeps streaming at
+ * full rate there, so `status` alone says 'live'. Races never count: on the grid the game can
+ * report the same value.
+ */
+export function inGarage(s: RaceSnapshot): boolean {
+  if (s.status !== 'live') return false
+  if ((s.session?.sessionType ?? '').startsWith('Race')) return false
+  return s.cars.find((c) => c.isPlayer)?.driverStatus === 0
+}
+
+/** On track and driving: radio rules apply. */
+export function isDriving(s: RaceSnapshot): boolean {
+  return s.status === 'live' && !inGarage(s)
+}
+
 type RaceStateEvents = {
   status: ConnectionStatus
   sessionStarted: { uid: string }

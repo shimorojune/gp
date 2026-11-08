@@ -16,8 +16,14 @@ const cell = (k: string, v: string, cls = 'v') =>
 
 function render({ race, listener, recording }: SnapshotMessage): void {
   const status = $('status')
-  status.textContent = race.status
-  status.className = `pill ${race.status}`
+  // Same rule as inGarage() in @gp/telemetry (kept local: the renderer can't load Node code).
+  const parked =
+    race.status === 'live' &&
+    !(race.session?.sessionType ?? '').startsWith('Race') &&
+    race.cars.find((c) => c.isPlayer)?.driverStatus === 0
+  const shown = parked ? 'garage' : race.status
+  status.textContent = shown
+  status.className = `pill ${shown}`
   $('pps').textContent = `${race.packetsPerSecond} pkt/s`
 
   const rec = $('rec')
