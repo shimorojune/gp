@@ -2,6 +2,7 @@ import { type Options, query, tool } from '@anthropic-ai/claude-agent-sdk'
 import {
   type HistoryDb,
   type LapTrace,
+  type LiveSession,
   type Program,
   careerBrief,
   careerView,
@@ -11,11 +12,13 @@ import {
   recentSessionsView,
   sessionDetailView,
   setupHistory,
+  setupTrial,
   trackBrief,
   trackRecall,
 } from '@gp/history'
 import { CAREER_GAME_MODES, type RaceSnapshot, type RaceState, TRACKS } from '@gp/telemetry'
 import { z } from 'zod'
+import { setupGuide } from './setup-guide.ts'
 
 const json = (value: unknown) => ({
   content: [{ type: 'text' as const, text: JSON.stringify(value) }],
@@ -30,14 +33,39 @@ function trackIdFor(name: string | undefined, s: RaceSnapshot): number | null {
 }
 
 export type LiveBest = () => { trackId: number | null; lapMs: number; trace: LapTrace } | null
+export type LiveLaps = () => LiveSession | null
 
 /** Tools over the long-term history. Every one returns a compact digest, never raw telemetry. */
 export function historyTools(
   history: HistoryDb,
   snapshot: () => RaceSnapshot,
   liveBest?: LiveBest,
+  liveLaps?: LiveLaps,
 ) {
   return [
+    tool(
+      'get_setup_guide',
+      'F1 23 setup reference: what every setting does and, for a handling problem he describes (e.g. "oversteer on exit of slow corners"), which changes to try in order with confidence and reasons. Always use this before suggesting a setup change; never suggest one from general intuition.',
+      {
+        symptom: z
+          .string()
+          .optional()
+          .describe('His words for the problem; omit for the full reference'),
+      },
+      async ({ symptom }) => json(setupGuide(symptom)),
+      readOnly,
+    ),
+    tool(
+      'get_setup_trial',
+      'Is the new setup better? Compares the setup he is on now with the one he ran before it in this session: verdict (better / worse / no clear difference / too early), lap and sector deltas (negative = new setup quicker, fuel-corrected), what changed, things that muddy the comparison, and where on the lap it differs. Use it whenever he asks "is that better" after a setup change.',
+      {},
+      async () => {
+        const live = liveLaps?.()
+        if (!live) return json({ verdict: 'no session' })
+        return json(setupTrial(live))
+      },
+      readOnly,
+    ),
     tool(
       'get_track_history',
       "The driver's history at a track (default: the current one): sessions done, personal best lap and when, best sectors ever and the ideal lap, recent sessions there with best/typical pace and results, career results there. Use it for targets and to tell him how today compares.",
@@ -156,8 +184,12 @@ export function attachHistory(
   opts: {
     /** A new race weekend started (not the first one of this app run). */
     onNewWeekend?: () => void
+    /** Live laps with setups (must already include the lap being reported). */
+    liveLaps?: LiveLaps
   } = {},
 ): HistoryHooks {
+  /** Setup runs we already reported on, by setup key and lap count. */
+  const reported = new Set<string>()
   let briefedUid: string | null = null
   let weekend: number | null = null
   let sessionBest = 0
@@ -194,12 +226,32 @@ export function attachHistory(
         const note = lapVsHistory(history, trackId, lap.lapTimeMs, lap.valid, sessionBest)
         if (lap.valid && lap.lapTimeMs > 0 && (!sessionBest || lap.lapTimeMs < sessionBest))
           sessionBest = lap.lapTimeMs
-        return note
+        return [note, setupNote()].filter(Boolean).join(' ') || null
       } catch {
         return null
       }
     },
     stop: () => clearInterval(timer),
+  }
+
+  /** After 2 and 4 clean laps on a new setup, tell him whether it's better without being asked. */
+  function setupNote(): string | null {
+    const live = opts.liveLaps?.()
+    if (!live) return null
+    const t = setupTrial(live) as ReturnType<typeof setupTrial> & {
+      after?: { laps: number }
+      delta?: string
+      sectors?: Record<string, string | null>
+    }
+    if (!t.after || !['better', 'worse', 'no clear difference'].includes(t.verdict)) return null
+    const key = `${live.laps.at(-1)?.setupKey}:${t.after.laps}`
+    if (![2, 4].includes(t.after.laps) || reported.has(key)) return null
+    reported.add(key)
+    const sectors = Object.entries(t.sectors ?? {})
+      .filter(([, v]) => v)
+      .map(([k, v]) => `${k} ${v}`)
+      .join(', ')
+    return `Setup check after ${t.after.laps} clean laps on the new setup: ${t.verdict} (${t.delta}${sectors ? `; ${sectors}` : ''}). Worth a short call.`
   }
 }
 

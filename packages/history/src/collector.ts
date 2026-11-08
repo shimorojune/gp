@@ -127,9 +127,12 @@ export interface SessionRecord {
 
 const BIN_M = 20
 
-/** Setup identity: everything the driver sets in the garage, minus fuel. */
+/**
+ * Setup identity: everything the driver sets in the garage, minus fuel, and minus brake bias,
+ * which he moves on the wheel lap by lap (the setup packet follows it).
+ */
 export function setupKey(s: CarSetup): string | null {
-  const { fuelLoad: _fuel, ...rest } = s
+  const { fuelLoad: _fuel, brakeBias: _bias, ...rest } = s
   if (Object.values(rest).every((v) => v === 0)) return null
   return JSON.stringify(rest)
 }
@@ -179,6 +182,8 @@ class SessionAccum {
   private lapDistance = -1
   private trace: TraceAccum | null = null
   bestTrace: { ms: number; trace: LapTrace } | null = null
+  /** Best clean lap trace per setup, for "is the new setup better" in this session. */
+  readonly bestBySetup = new Map<string, { ms: number; trace: LapTrace }>()
   private lastDamage = 0
   private result: SessionResult | null = null
   private session: Extract<Packet, { id: PacketId.Session }>['data'] | null = null
@@ -356,8 +361,13 @@ class SessionAccum {
     this.laps.set(l.lapNumber, rec)
     const tr = this.trace
     if (tr && tr.lap === l.lapNumber && !tr.dirty && l.valid) {
+      const done = finishTrace(tr)
       if (!this.bestTrace || l.lapTimeMs < this.bestTrace.ms)
-        this.bestTrace = { ms: l.lapTimeMs, trace: finishTrace(tr) }
+        this.bestTrace = { ms: l.lapTimeMs, trace: done }
+      const key = this.currentSetup
+      const prev = key ? this.bestBySetup.get(key) : undefined
+      if (key && (!prev || l.lapTimeMs < prev.ms))
+        this.bestBySetup.set(key, { ms: l.lapTimeMs, trace: done })
     }
   }
 
@@ -394,6 +404,11 @@ class SessionAccum {
         flashback: this.flashbackLaps.has(lap),
       })
     }
+  }
+
+  /** Laps so far (in order) with the setups they were driven on, for live comparisons. */
+  liveLaps(): { laps: LapRecord[]; setups: Record<string, CarSetup> } {
+    return { laps: [...this.laps.values()].sort((a, b) => a.lap - b.lap), setups: this.setups }
   }
 
   /** Build the record. Null when nothing worth keeping happened (menus, garage only). */
@@ -509,6 +524,22 @@ export class SessionCollector {
   }
 
   /** The current session's best clean lap so far, live (for corner-by-corner comparison). */
+  /** The live session's laps, setups and per-setup best traces (null before any session). */
+  live(): {
+    trackId: number | null
+    laps: LapRecord[]
+    setups: Record<string, CarSetup>
+    bestBySetup: Map<string, { ms: number; trace: LapTrace }>
+  } | null {
+    const c = this.cur
+    if (!c) return null
+    return {
+      trackId: c.state.snapshot().session?.trackId ?? null,
+      ...c.liveLaps(),
+      bestBySetup: c.bestBySetup,
+    }
+  }
+
   liveBest(): { trackId: number | null; lapMs: number; trace: LapTrace } | null {
     const b = this.cur?.bestTrace
     if (!b) return null

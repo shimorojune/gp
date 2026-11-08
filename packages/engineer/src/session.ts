@@ -8,7 +8,7 @@ import {
 import type { HistoryDb } from '@gp/history'
 import { TypedEmitter } from '@gp/shared'
 import type { RaceSnapshot } from '@gp/telemetry'
-import type { LiveBest } from './history.ts'
+import type { LiveBest, LiveLaps } from './history.ts'
 import type { NotesStore } from './notes.ts'
 import { buildSystemPrompt } from './persona.ts'
 import { AsyncQueue } from './queue.ts'
@@ -22,6 +22,8 @@ export interface EngineerOptions {
   history?: HistoryDb
   /** This session's best clean lap trace, live (for get_corner_comparison). */
   liveBest?: LiveBest
+  /** This session's laps with their setups (for get_setup_trial). */
+  liveLaps?: LiveLaps
   driverName?: string
   engineerName?: string
   /** Model for things the driver asks. Default 'sonnet'. */
@@ -117,6 +119,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
       notes: this.opts.notes,
       ...(this.opts.history ? { history: this.opts.history } : {}),
       ...(this.opts.liveBest ? { liveBest: this.opts.liveBest } : {}),
+      ...(this.opts.liveLaps ? { liveLaps: this.opts.liveLaps } : {}),
     })
     const track = this.opts.snapshot().session?.track ?? null
     const options: Options = {
@@ -182,10 +185,11 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
     )
   }
 
-  private send(content: string, model: string, kind: TurnKind): Promise<Reply> {
+  private send(text: string, model: string, kind: TurnKind): Promise<Reply> {
     this.start()
+    let content = text
     if (this.context.length) {
-      content = `${this.context.map((c) => `[context] ${c}`).join('\n')}\n${content}`
+      content = `${this.context.map((c) => `[context] ${c}`).join('\n')}\n${text}`
       this.context = []
     }
     const id = this.nextId++

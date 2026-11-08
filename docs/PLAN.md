@@ -410,7 +410,10 @@ GP grows with the driver from a local SQLite database, `~/Documents/GP/gp.db` (`
 - **Context budget:** the system prompt carries a driver profile (≤ 1200 chars, four lines: strengths, working on, habits, progress). Each new session adds a ~80-token track brief (PB, best sectors, last time there) to the next turn as `[context]`. Lap events note a new PB at the track. Everything else is on demand through tools: `get_track_history`, `get_recent_sessions`, `get_session_detail`, `get_driver_profile`.
 - **Learning:** after each saved session (3+ laps) Haiku writes a one- or two-sentence summary into the session row and refines the profile.
 - **Coaching:** `get_setup_history` lists the setups driven at a track with their best/typical pace and the changes to the current setup. `get_corner_comparison` compares this session's best lap (live) with the PB lap's trace, braking zone by braking zone: time, minimum speed, braking point, full-throttle point.
-- **Still to come:** career tracking (season, teammate, weekend briefing, fresh conversation per weekend), notes/profile tab in the app.
+- **Setup reference:** `packages/engineer/src/setup-guide.ts`: what each F1 23 setting does (ranges from the F1 23 preview and the game's telemetry) and symptom -> ordered changes with confidence and reasons, from F1Laps, EarlyGame, RacingGames.gg and the Solox F1 23 setup database. `get_setup_guide` serves it; the persona forbids setup advice that doesn't come from it.
+- **"Is that better?":** `get_setup_trial` compares the setup he's on with the previous one this session (median clean lap with 3+ laps each, else best lap; fuel-corrected at ~30 ms/kg; tyre age/compound flagged; per-sector and per-braking-zone deltas). Lap events carry an automatic setup check after 2 and 4 clean laps on a new setup. Brake bias is not part of a setup's identity (he moves it on the wheel).
+- **Career:** full classification stored per race and quali; `get_career` gives rounds, teammate head-to-head, points and standings from the races recorded; a career brief joins the session [context]; each new race weekend restarts the conversation.
+- **Still to come:** notes/profile tab in the app.
 
 ## 10. Phases
 

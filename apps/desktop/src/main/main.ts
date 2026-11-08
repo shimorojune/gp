@@ -40,8 +40,8 @@ const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
 const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 10)
 const history = new HistoryDb(join(GP_HOME, 'gp.db'))
 /** Live copy of what the history will record, for corner comparisons during the session. */
-let live = new SessionCollector(Date.now())
 const liveStart = Date.now()
+const live = new SessionCollector(liveStart)
 
 const listener = new TelemetryListener({ port: PORT })
 const state = new RaceState()
@@ -57,6 +57,7 @@ const engineer = new EngineerSession({
   notes: new NotesStore(join(GP_HOME, 'notes.json')),
   history,
   liveBest: () => live.liveBest(),
+  liveLaps: () => live.live(),
   cwd: engineerCwd,
   ...(process.env.GP_MODEL ? { model: process.env.GP_MODEL } : {}),
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
@@ -73,6 +74,7 @@ engineer.on('error', (e) => {
 })
 engineer.on('turn', (t) => console.log(`[engineer] ${t.phase} #${t.id} ${t.kind} ${t.detail}`))
 const historyHooks = attachHistory(state, history, (t) => engineer.addContext(t), {
+  liveLaps: () => live.live(),
   onNewWeekend: () => {
     console.log('[engineer] new race weekend: fresh conversation')
     void engineer.restart().catch((e) => console.error('[engineer] restart failed', e))
@@ -92,12 +94,9 @@ attachRadio(state, engineer, {
 })
 
 listener.on('packet', (p) => {
-  state.ingest(p)
+  // Live collector first, so a lap event already sees that lap (setup check on the radio).
   live.feed(p, Date.now() - liveStart)
-})
-// The live collector only needs the current session; drop finished ones so it doesn't grow.
-state.on('sessionStarted', () => {
-  live = new SessionCollector(Date.now())
+  state.ingest(p)
 })
 // Record every session automatically (one file per session) unless GP_AUTO_RECORD=0 or the
 // driver switched recording off in the dashboard.
