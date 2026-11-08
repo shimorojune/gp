@@ -23,6 +23,7 @@ export async function collectRecording(path: string): Promise<SessionRecord[]> {
 export interface IngestResult {
   file: string
   sessions: SessionRecord[]
+  /** Sessions stored or updated by this recording (not ones already in the database). */
   ids: number[]
   error: string | null
 }
@@ -36,8 +37,11 @@ export async function ingestRecording(db: HistoryDb, path: string): Promise<Inge
     const sessions = await collectRecording(path)
     const ids: number[] = []
     for (const s of sessions) {
+      const before = db.sessionVersion(s.uid)
       const id = db.saveSession(s, file)
-      if (id !== null) ids.push(id)
+      // Only sessions that are new or got more laps need a debrief (the same session can be
+      // in several recordings).
+      if (id !== null && db.sessionVersion(s.uid) !== before) ids.push(id)
     }
     db.markRecording(file, bytes, sessions.length, null)
     return { file, sessions, ids, error: null }

@@ -235,6 +235,14 @@ export class HistoryDb {
     }
   }
 
+  /** Row id of a session by game uid, or null: changes when a session is replaced. */
+  sessionVersion(uid: string): number | null {
+    const r = this.db.prepare('SELECT id FROM sessions WHERE uid = ?').get(uid) as
+      | { id: number }
+      | undefined
+    return r?.id ?? null
+  }
+
   hasRecording(file: string): boolean {
     return this.db.prepare('SELECT 1 FROM recordings WHERE file = ?').get(file) !== undefined
   }

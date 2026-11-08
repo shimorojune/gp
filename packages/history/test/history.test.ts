@@ -100,6 +100,17 @@ describe('HistoryDb', () => {
     expect(db.sessionLaps(rows[0]!.id)).toHaveLength(2)
   })
 
+  it('reports a session only once when two recordings hold it', async () => {
+    const db = new HistoryDb(':memory:')
+    const r = record('9', [lap(1, 80000)])
+    const before = db.sessionVersion('9')
+    db.saveSession(r, 'a.gprec')
+    expect(db.sessionVersion('9')).not.toBe(before)
+    const again = db.sessionVersion('9')
+    db.saveSession(r, 'b.gprec')
+    expect(db.sessionVersion('9')).toBe(again)
+  })
+
   it('prunes only old recordings that were ingested', () => {
     const dir = mkdtempSync(join(tmpdir(), 'gp-hist-'))
     const db = new HistoryDb(':memory:')
