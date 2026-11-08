@@ -21,6 +21,7 @@ import {
 } from '@gp/history'
 import { CAREER_GAME_MODES, type RaceSnapshot, type RaceState, TEAMS, TRACKS } from '@gp/telemetry'
 import { z } from 'zod'
+import type { IncidentMemory } from './incidents.ts'
 import { setupGuide } from './setup-guide.ts'
 
 const json = (value: unknown) => ({
@@ -207,6 +208,7 @@ export interface HistoryHooks {
   lapNote: (lap: { lapTimeMs: number; valid: boolean }) => string | null
   /** "corner 4", numbered like get_corner_comparison, from his best trace at this track. */
   locate: (lapDistanceM: number) => string | null
+  incidentMemory: IncidentMemory
   stop: () => void
 }
 
@@ -292,6 +294,26 @@ export function attachHistory(
       } catch {
         return null
       }
+    },
+    incidentMemory: {
+      add: (kind, atM) => {
+        const s = state.snapshot().session
+        if (!s) return
+        try {
+          history.addTrackIncident({ trackId: s.trackId, sessionUid: s.uid, kind, atM })
+        } catch (e) {
+          console.error('[history] incident save failed', e)
+        }
+      },
+      near: (atM) => {
+        const s = state.snapshot().session
+        if (!s) return { session: 0, total: 0, sessions: 0 }
+        try {
+          return history.trackIncidentsNear(s.trackId, s.uid, atM)
+        } catch {
+          return { session: 0, total: 0, sessions: 0 }
+        }
+      },
     },
     stop: () => clearInterval(timer),
   }

@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -127,6 +127,18 @@ CREATE TABLE IF NOT EXISTS traces (
   lap_ms INTEGER NOT NULL,
   data TEXT NOT NULL
 );
+
+-- Spins, stops and impacts seen live, by spot on the lap, so repeats show across sessions.
+CREATE TABLE IF NOT EXISTS track_incidents (
+  id INTEGER PRIMARY KEY,
+  track_id INTEGER NOT NULL,
+  session_uid TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  at_m REAL NOT NULL,
+  detail TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS track_incidents_track ON track_incidents(track_id, at_m);
 `
 
 /** Session stats derived from its laps, so the DB never has to re-read raw laps for a summary. */
@@ -444,6 +456,35 @@ export class HistoryDb {
            edited_by = excluded.edited_by`,
       )
       .run(text.trim(), new Date().toISOString(), editedBy)
+  }
+
+  addTrackIncident(i: {
+    trackId: number
+    sessionUid: string
+    kind: string
+    atM: number
+    detail?: string
+  }): void {
+    this.db
+      .prepare(
+        'INSERT INTO track_incidents (track_id, session_uid, kind, at_m, detail) VALUES (?, ?, ?, ?, ?)',
+      )
+      .run(i.trackId, i.sessionUid, i.kind, i.atM, i.detail ?? null)
+  }
+
+  /** Earlier incidents within `radiusM` of a spot at this track: this session and all time. */
+  trackIncidentsNear(trackId: number, sessionUid: string, atM: number, radiusM = 150) {
+    const r = this.db
+      .prepare(
+        `SELECT SUM(session_uid = ?) AS session, COUNT(*) AS total, COUNT(DISTINCT session_uid) AS sessions
+         FROM track_incidents WHERE track_id = ? AND ABS(at_m - ?) < ?`,
+      )
+      .get(sessionUid, trackId, atM, radiusM) as {
+      session: number | null
+      total: number
+      sessions: number
+    }
+    return { session: r.session ?? 0, total: r.total, sessions: r.sessions }
   }
 
   setSummary(sessionId: number, summary: string): void {

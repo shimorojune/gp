@@ -122,3 +122,14 @@ describe('HistoryDb', () => {
     expect(readdirSync(dir).sort()).toEqual(['2.gprec', '4.gprec'])
   })
 })
+
+describe('track incidents', () => {
+  it('counts earlier incidents near a spot, this session and all time', async () => {
+    const { HistoryDb } = await import('../src/db.ts')
+    const db = new HistoryDb(':memory:')
+    db.addTrackIncident({ trackId: 3, sessionUid: 'a', kind: 'spin', atM: 920 })
+    db.addTrackIncident({ trackId: 3, sessionUid: 'b', kind: 'spin', atM: 900 })
+    db.addTrackIncident({ trackId: 3, sessionUid: 'b', kind: 'spin', atM: 2400 })
+    expect(db.trackIncidentsNear(3, 'b', 930)).toEqual({ session: 1, total: 2, sessions: 2 })
+  })
+})

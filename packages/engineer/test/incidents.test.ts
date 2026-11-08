@@ -78,7 +78,7 @@ describe('IncidentDetector patterns', () => {
     }
     const first = spin(0)
     expect(first[0]).toMatch(
-      /corner 4, 1180 m into the lap \(throttle 100%, brake 0%, gear 3 just before\)/,
+      /corner 4, 1180 m into the lap\. The slide began at 72 kph on 100% throttle, 0% brake; then throttle 100%, brake 0%, gear 3\./,
     )
     expect(first[0]).not.toMatch(/pattern/)
     const second = spin(90_000)
@@ -100,7 +100,7 @@ describe('IncidentDetector edge cases', () => {
     })
     expect(out).toEqual([])
   })
-  it('calls a stop on track mid-lap', () => {
+  const stopRun = (sideways: boolean) => {
     const d = new IncidentDetector()
     const out: string[] = []
     for (let t = 0, v = 60; t <= 1200; t += 100, v = Math.max(0, v - 6))
@@ -108,13 +108,20 @@ describe('IncidentDetector edge cases', () => {
         ...d.update({
           t,
           speedKph: v,
-          localVx: 0,
+          // A slide (35 deg) or a straight, deliberate stop.
+          localVx: sideways ? (v / 3.6) * 0.7 : 0,
           localVz: v / 3.6,
           damage: dmg(),
           lapDistanceM: 1000 + t / 100,
           onLap: true,
         }),
       )
-    expect(out[0]).toMatch(/stopped on track/)
+    return out
+  }
+  it('calls a stop on track after a slide', () => {
+    expect(stopRun(true).some((l) => /stopped on track/.test(l))).toBe(true)
+  })
+  it('ignores a deliberate stop', () => {
+    expect(stopRun(false)).toEqual([])
   })
 })

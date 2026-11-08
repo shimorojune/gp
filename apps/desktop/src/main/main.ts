@@ -87,6 +87,7 @@ const historyHooks = attachHistory(state, history, (t) => engineer.addContext(t)
 attachRadio(state, engineer, {
   lapNote: historyHooks.lapNote,
   locate: historyHooks.locate,
+  incidentMemory: historyHooks.incidentMemory,
   onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
     voice.radioCall(r.text, urgent)

@@ -7,7 +7,7 @@ import {
   isDriving,
   sessionKind,
 } from '@gp/telemetry'
-import { IncidentDetector } from './incidents.ts'
+import { IncidentDetector, type IncidentMemory } from './incidents.ts'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 
@@ -35,6 +35,8 @@ export interface RadioOptions {
   lapNote?: (lap: { lapTimeMs: number; valid: boolean }) => string | null
   /** Names a spot on the lap ("corner 4") for incident calls. */
   locate?: (lapDistanceM: number) => string | null
+  /** Incidents kept across sessions (history DB), so repeats at a spot add up. */
+  incidentMemory?: IncidentMemory
 }
 
 interface Queued {
@@ -174,7 +176,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   }, pollMs)
 
   // Spins and impacts, from the player's own car at ~10 Hz.
-  const incidents = new IncidentDetector(opts.locate)
+  const incidents = new IncidentDetector(opts.locate, opts.incidentMemory ?? null)
   const incidentPoll = setInterval(() => {
     if (closed) return
     const s = state.snapshot()
