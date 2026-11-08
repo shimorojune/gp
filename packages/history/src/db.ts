@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 4
+const SCHEMA_VERSION = 5
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS laps (
   tyre TEXT,
   tyre_age INTEGER,
   fuel_kg REAL,
+  wear_pct REAL,
   position INTEGER,
   setup_id INTEGER REFERENCES setups(id),
   flashback INTEGER NOT NULL,
@@ -227,8 +228,123 @@ export class HistoryDb {
       // New tables come from SCHEMA (IF NOT EXISTS); new columns on old tables need ALTERs.
       this.db.exec(SCHEMA)
       if (v >= 1 && v < 3) this.db.exec('ALTER TABLE sessions ADD COLUMN teammate_points INTEGER')
+      if (v >= 1 && v < 5) {
+        if (path !== ':memory:') this.db.exec(`VACUUM INTO '${path.replace(/'/g, "''")}.bak-v4'`)
+        this.db.exec('ALTER TABLE laps ADD COLUMN wear_pct REAL')
+        // Re-read the recordings still on disk once, to fill in tyre wear for their laps.
+        this.db.exec('DELETE FROM recordings')
+      }
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
+      if (v >= 1 && v < 5) this.tx(() => this.dedupeCareer())
     }
+  }
+
+  /**
+   * The game gives a career session a new id after an app restart, so the same P1 got stored
+   * once per restart. One career weekend has one session of each type: merge the copies.
+   */
+  private careerTwin(id: number): number | null {
+    const r = this.db
+      .prepare(
+        `SELECT t.id, t.laps_done, t.finish_pos FROM sessions s JOIN sessions t
+           ON t.program = 'career' AND t.weekend_link = s.weekend_link AND t.session_type = s.session_type
+          AND t.track_id = s.track_id AND t.id != s.id
+         WHERE s.id = ? AND s.program = 'career' AND s.weekend_link != 0
+         ORDER BY (t.finish_pos IS NOT NULL) DESC, t.laps_done DESC LIMIT 1`,
+      )
+      .get(id) as { id: number } | undefined
+    return r?.id ?? null
+  }
+
+  private dedupeCareer(): void {
+    const ids = this.db
+      .prepare(
+        `SELECT id FROM sessions WHERE program = 'career' AND weekend_link != 0
+         ORDER BY (finish_pos IS NOT NULL) DESC, laps_done DESC, id`,
+      )
+      .all() as { id: number }[]
+    const gone = new Set<number>()
+    for (const { id } of ids) {
+      if (gone.has(id)) continue
+      for (;;) {
+        const twin = this.careerTwin(id)
+        if (twin === null) break
+        this.mergeSessions(id, twin)
+        gone.add(twin)
+      }
+    }
+  }
+
+  /** Fold `otherId` into `keepId`: missing laps added, gaps in kept laps filled. */
+  private mergeSessions(keepId: number, otherId: number): void {
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO laps (session_id, lap, lap_ms, s1_ms, s2_ms, s3_ms, valid, tyre, tyre_age,
+           fuel_kg, wear_pct, position, setup_id, flashback)
+         SELECT ?, lap, lap_ms, s1_ms, s2_ms, s3_ms, valid, tyre, tyre_age, fuel_kg, wear_pct, position,
+           setup_id, flashback FROM laps WHERE session_id = ?`,
+      )
+      .run(keepId, otherId)
+    this.db
+      .prepare(
+        `UPDATE laps SET tyre = COALESCE(laps.tyre, o.tyre), tyre_age = COALESCE(laps.tyre_age, o.tyre_age),
+           fuel_kg = COALESCE(laps.fuel_kg, o.fuel_kg), wear_pct = COALESCE(laps.wear_pct, o.wear_pct),
+           setup_id = COALESCE(laps.setup_id, o.setup_id)
+         FROM laps o WHERE laps.session_id = ? AND o.session_id = ? AND o.lap = laps.lap`,
+      )
+      .run(keepId, otherId)
+    this.db
+      .prepare(
+        'UPDATE sessions SET started_at = MIN(started_at, (SELECT started_at FROM sessions WHERE id = ?)) WHERE id = ?',
+      )
+      .run(otherId, keepId)
+    this.db.prepare('DELETE FROM sessions WHERE id = ?').run(otherId)
+    const rows = this.db
+      .prepare(
+        'SELECT lap, lap_ms, s1_ms, s2_ms, s3_ms, valid, flashback FROM laps WHERE session_id = ?',
+      )
+      .all(keepId) as {
+      lap: number
+      lap_ms: number
+      s1_ms: number | null
+      s2_ms: number | null
+      s3_ms: number | null
+      valid: number
+      flashback: number
+    }[]
+    const st = lapStats(
+      rows.map((r) => ({
+        lap: r.lap,
+        lapMs: r.lap_ms,
+        s1Ms: r.s1_ms ?? 0,
+        s2Ms: r.s2_ms ?? 0,
+        s3Ms: r.s3_ms ?? 0,
+        valid: r.valid === 1,
+        tyre: null,
+        tyreAge: null,
+        fuelKg: null,
+        position: 0,
+        setupKey: null,
+        flashback: r.flashback === 1,
+      })),
+    )
+    this.db
+      .prepare(
+        `UPDATE sessions SET laps_done = ?, valid_laps = ?, best_lap_ms = ?, best_s1_ms = ?, best_s2_ms = ?,
+           best_s3_ms = ?, ideal_lap_ms = ?, median_lap_ms = ?, consistency_ms = ? WHERE id = ?`,
+      )
+      .run(
+        st.lapsDone,
+        st.validLaps,
+        st.bestLapMs,
+        st.bestS1Ms,
+        st.bestS2Ms,
+        st.bestS3Ms,
+        st.idealLapMs,
+        st.medianLapMs,
+        st.consistencyMs,
+        keepId,
+      )
   }
 
   close(): void {
@@ -297,7 +413,14 @@ export class HistoryDb {
       const existing = this.db
         .prepare('SELECT id, laps_done FROM sessions WHERE uid = ?')
         .get(s.uid) as { id: number; laps_done: number } | undefined
-      if (existing && existing.laps_done >= s.laps.length) return existing.id
+      if (existing && existing.laps_done >= s.laps.length) {
+        // Same session read again: fill in anything older versions didn't store.
+        const fill = this.db.prepare(
+          'UPDATE laps SET wear_pct = ? WHERE session_id = ? AND lap = ? AND wear_pct IS NULL',
+        )
+        for (const l of s.laps) if (l.wearPct != null) fill.run(l.wearPct, existing.id, l.lap)
+        return existing.id
+      }
       if (existing) this.db.prepare('DELETE FROM sessions WHERE id = ?').run(existing.id)
 
       const setupIds = new Map<string, number>()
@@ -374,7 +497,7 @@ export class HistoryDb {
       const id = Number(r.lastInsertRowid)
       const lap = this.db.prepare(
         `INSERT INTO laps (session_id, lap, lap_ms, s1_ms, s2_ms, s3_ms, valid, tyre, tyre_age,
-          fuel_kg, position, setup_id, flashback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          fuel_kg, wear_pct, position, setup_id, flashback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       for (const l of s.laps)
         lap.run(
@@ -388,6 +511,7 @@ export class HistoryDb {
           l.tyre,
           l.tyreAge,
           l.fuelKg,
+          l.wearPct ?? null,
           l.position || null,
           l.setupKey ? (setupIds.get(l.setupKey) ?? null) : null,
           l.flashback ? 1 : 0,
@@ -417,6 +541,19 @@ export class HistoryDb {
         this.db
           .prepare('INSERT INTO traces (session_id, lap, lap_ms, data) VALUES (?, ?, ?, ?)')
           .run(id, s.bestTrace.lap, ms, JSON.stringify(s.bestTrace))
+      }
+      // Same career session under a new game id (app restarted): one copy, merged.
+      const twin = this.careerTwin(id)
+      if (twin !== null) {
+        const rank = (x: number) =>
+          this.db
+            .prepare(
+              'SELECT (finish_pos IS NOT NULL) * 1000 + laps_done AS r FROM sessions WHERE id = ?',
+            )
+            .get(x) as { r: number }
+        const keep = rank(twin).r >= rank(id).r ? twin : id
+        this.mergeSessions(keep, keep === id ? twin : id)
+        return keep
       }
       return id
     })

@@ -1,6 +1,6 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
-import type { HistoryDb } from '@gp/history'
-import type { RaceSnapshot } from '@gp/telemetry'
+import { type HistoryDb, stintModel } from '@gp/history'
+import { CAREER_GAME_MODES, type RaceSnapshot } from '@gp/telemetry'
 import { z } from 'zod'
 import { type LiveBest, type LiveLaps, historyTools } from './history.ts'
 import type { NoteCategory, NotesStore } from './notes.ts'
@@ -118,9 +118,23 @@ export function createRaceTools({
     ),
     tool(
       'get_strategy',
-      "Race pit strategy: laps left, fitted tyre wear and wear per lap, laps until the tyres are worn, the game's pit window, sets available, compounds used, a suggested plan, and the plan agreed with him. Use before the start and whenever stops come up.",
+      "Race pit strategy, and in practice the long-run data it's built from (wear per lap, pace drop per lap and fuel per lap per compound from his own runs, and which compounds still need a run). Race: laps left, fitted tyre wear and wear per lap, laps until the tyres are worn, the game's pit window, sets available, compounds used, a suggested plan, and the plan agreed with him. Use before the start and whenever stops come up.",
       {},
-      async () => json(strategyView(snapshot(), pitPlan)),
+      async () => {
+        const s = snapshot()
+        const sess = s.session
+        let practice = null
+        if (history && sess)
+          try {
+            practice = stintModel(
+              history,
+              sess.trackId,
+              CAREER_GAME_MODES.has(sess.gameMode) ? sess.weekendLink : null,
+              liveLaps?.()?.laps ?? [],
+            )
+          } catch {}
+        return json(strategyView(s, pitPlan, practice))
+      },
       readOnly,
     ),
     tool(

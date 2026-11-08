@@ -34,6 +34,8 @@ export interface LapRecord {
   tyre: string | null
   tyreAge: number | null
   fuelKg: number | null
+  /** Worst of the four tyres' wear at the end of the lap, %. */
+  wearPct?: number | null
   position: number
   /** Key into SessionRecord.setups; null if the game sent no setup. */
   setupKey: string | null
@@ -184,6 +186,8 @@ class SessionAccum {
   bestTrace: { ms: number; trace: LapTrace } | null = null
   /** Best clean lap trace per setup, for "is the new setup better" in this session. */
   readonly bestBySetup = new Map<string, { ms: number; trace: LapTrace }>()
+  /** Worst tyre wear from the latest damage packet, %. */
+  private tyreWear: number | null = null
   private lastDamage = 0
   private result: SessionResult | null = null
   private session: Extract<Packet, { id: PacketId.Session }>['data'] | null = null
@@ -258,6 +262,7 @@ class SessionAccum {
       case PacketId.CarDamage: {
         const d = p.data.cars[this.playerIdx]
         if (!d) break
+        this.tyreWear = Math.max(...d.tyresWear)
         const worst = Math.max(
           d.frontLeftWingDamage,
           d.frontRightWingDamage,
@@ -353,6 +358,7 @@ class SessionAccum {
       tyre: l.tyreVisual,
       tyreAge: l.tyreAgeLaps,
       fuelKg: l.fuelKg === null ? null : Math.round(l.fuelKg * 10) / 10,
+      wearPct: this.tyreWear === null ? null : Math.round(this.tyreWear * 10) / 10,
       position: l.position,
       setupKey: this.currentSetup,
       flashback: this.flashbackLaps.has(l.lapNumber),

@@ -87,6 +87,63 @@ describe('HistoryDb', () => {
     return { ...c.finish()[0]!, laps }
   }
 
+  it('stint model: wear, pace loss and fuel burn from a practice long run', async () => {
+    const { stintModel } = await import('../src/stints.ts')
+    const db = new HistoryDb(':memory:')
+    const laps: LapRecord[] = Array.from({ length: 8 }, (_, i) => ({
+      ...lap(i + 1, 90000 + i * 100),
+      tyre: 'Medium',
+      tyreAge: i + 1,
+      fuelKg: Math.round((20 - i * 1.8) * 10) / 10,
+      wearPct: 3 + (i + 1) * 4,
+    }))
+    db.saveSession({ ...record('5', laps), trackId: 9 }, 'x.gprec')
+    const m = stintModel(db, 9)
+    expect(m.fuelPerLapKg).toBe(1.8)
+    expect(m.compounds[0]).toMatchObject({
+      compound: 'Medium',
+      wearPerLapPct: 4,
+      lapsTo70PctWear: 17,
+      paceLossPerLapMs: 100,
+    })
+  })
+
+  it('merges a career session saved again under a new game id (app restart)', () => {
+    const db = new HistoryDb(':memory:')
+    const career = (uid: string, laps: LapRecord[]) => ({
+      ...record(uid, laps),
+      program: 'career' as const,
+      weekendLink: 42,
+      sessionType: 'P2',
+    })
+    const noFuel = (l: LapRecord) => ({ ...l, fuelKg: null, tyreAge: null })
+    const a = db.saveSession(
+      career('11', [noFuel(lap(1, 80000)), noFuel(lap(2, 79000))]),
+      'a.gprec',
+    )
+    // After the restart: the game re-sends laps 1-2 (no fuel) and the app sees lap 3 live.
+    const b = db.saveSession(
+      career('12', [lap(1, 80000), noFuel(lap(2, 79000)), { ...lap(3, 78500), wearPct: 12 }]),
+      'b.gprec',
+    )
+    const rows = db.db.prepare('SELECT id, laps_done, best_lap_ms FROM sessions').all() as {
+      id: number
+      laps_done: number
+      best_lap_ms: number
+    }[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.laps_done).toBe(3)
+    expect(rows[0]!.best_lap_ms).toBe(78500)
+    expect([a, b]).toContain(rows[0]!.id)
+    const fuel = db.db.prepare('SELECT lap, fuel_kg, wear_pct FROM laps ORDER BY lap').all() as {
+      lap: number
+      fuel_kg: number | null
+      wear_pct: number | null
+    }[]
+    expect(fuel[0]!.fuel_kg).toBe(10)
+    expect(fuel[2]!.wear_pct).toBe(12)
+  })
+
   it('stores a session once, keeping the copy with more laps', () => {
     const db = new HistoryDb(':memory:')
     const id1 = db.saveSession(record('7', [lap(1, 80000)]), 'a.gprec')
