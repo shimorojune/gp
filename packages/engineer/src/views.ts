@@ -7,11 +7,13 @@ import { formatDelta, formatLapTime } from '@gp/shared'
 import {
   ACTUAL_COMPOUNDS,
   type CarSnapshot,
+  DRIVER_STATUS,
   PIT_STATUS,
   type RaceSnapshot,
   TEAMS,
   VISUAL_COMPOUNDS,
   inGarage,
+  sessionKind,
 } from '@gp/telemetry'
 
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -38,6 +40,44 @@ function neighbours(s: RaceSnapshot, me: CarSnapshot | undefined) {
   return { ahead, behind }
 }
 
+/**
+ * The nearest cars physically ahead and behind on the road (from each car's distance round
+ * the lap), for practice and qualifying, where the timesheet order says nothing about who is
+ * near him. Cars in the garage or pit lane are left out.
+ */
+export function onTrackTraffic(s: RaceSnapshot) {
+  const me = s.cars.find((c) => c.isPlayer)
+  const len = s.session?.trackLengthM ?? 0
+  if (!me || len <= 0 || me.driverStatus === 0) return { ahead: null, behind: null }
+  // Metres per second for the time estimate; a sensible racing speed when he is slow or stopped.
+  const mps = Math.max((s.player?.speedKph ?? 0) / 3.6, 50)
+  let ahead: { car: CarSnapshot; m: number } | null = null
+  let behind: { car: CarSnapshot; m: number } | null = null
+  for (const c of s.cars) {
+    if (c.isPlayer || c.driverStatus === 0 || c.pitStatus > 0 || !running(c)) continue
+    let d = (c.lapDistanceM - me.lapDistanceM) % len
+    if (d > len / 2) d -= len
+    if (d < -len / 2) d += len
+    if (d >= 0 && (!ahead || d < ahead.m)) ahead = { car: c, m: d }
+    if (d < 0 && (!behind || -d < behind.m)) behind = { car: c, m: -d }
+  }
+  const view = (x: { car: CarSnapshot; m: number } | null) =>
+    x
+      ? {
+          driver: x.car.name,
+          metres: Math.round(x.m),
+          approxGapSec: r1(x.m / mps),
+          theirLap: DRIVER_STATUS[x.car.driverStatus] ?? null,
+        }
+      : null
+  return { ahead: view(ahead), behind: view(behind) }
+}
+
+function fastestGap(s: RaceSnapshot, me: CarSnapshot): string | null {
+  const best = Math.min(...s.cars.map((c) => c.bestLapMs).filter((x) => x > 0))
+  return me.bestLapMs > 0 && Number.isFinite(best) ? formatDelta(me.bestLapMs - best) : null
+}
+
 export function situation(s: RaceSnapshot) {
   const me = s.cars.find((c) => c.isPlayer)
   const sess = s.session
@@ -45,6 +85,7 @@ export function situation(s: RaceSnapshot) {
     status: inGarage(s) ? 'garage' : s.status,
     track: sess?.track ?? null,
     session: sess?.sessionType ?? null,
+    sessionKind: sessionKind(sess?.sessionType),
     lap: me ? me.currentLap : null,
     totalLaps: sess?.totalLaps || null,
     position: me?.position ?? null,
@@ -57,7 +98,9 @@ export function situation(s: RaceSnapshot) {
 export function raceSnapshotView(s: RaceSnapshot) {
   const me = s.cars.find((c) => c.isPlayer)
   const p = s.player
-  const { ahead, behind } = neighbours(s, me)
+  const race = sessionKind(s.session?.sessionType) === 'race'
+  const { ahead, behind } = race ? neighbours(s, me) : { ahead: undefined, behind: undefined }
+  const traffic = race ? null : onTrackTraffic(s)
   return {
     ...situation(s),
     // The game labels the driver's car with that seat's real driver; it IS the driver.
@@ -69,6 +112,15 @@ export function raceSnapshotView(s: RaceSnapshot) {
     gapBehind: behind
       ? { driver: behind.name, gap: formatDelta(behind.deltaToCarInFrontMs) }
       : null,
+    ...(traffic
+      ? {
+          timesheet: {
+            note: 'Not a race: position is best-lap order, not who is near him. Nearby cars are trafficOnTrack.',
+            gapToFastest: me && me.position > 1 ? fastestGap(s, me) : null,
+          },
+          trafficOnTrack: traffic,
+        }
+      : {}),
     tyre: me
       ? `${me.tyreVisual ?? '?'} (${me.tyreActual ?? '?'}), ${me.tyreAgeLaps ?? '?'} laps old`
       : null,
@@ -247,7 +299,11 @@ export function paceTargetsView(s: RaceSnapshot) {
       )
   }
 
-  const { ahead, behind } = neighbours(s, me)
+  // Chasing and defending are race ideas; in practice and quali the timesheet isn't the road.
+  const { ahead, behind } =
+    sessionKind(s.session?.sessionType) === 'race'
+      ? neighbours(s, me)
+      : { ahead: undefined, behind: undefined }
   const chase =
     ahead && me && me.deltaToCarInFrontMs > 0
       ? (() => {

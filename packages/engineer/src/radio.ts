@@ -5,6 +5,7 @@ import {
   type RaceState,
   inGarage,
   isDriving,
+  sessionKind,
 } from '@gp/telemetry'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
@@ -126,6 +127,13 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     }
     const me = s.cars.find((c) => c.isPlayer)
     if (!isDriving(s) || !me?.position) return
+    // Outside races the position is the timesheet: it moves when others set laps, not when
+    // anyone passes him. The lap events carry it instead.
+    if (sessionKind(s.session?.sessionType) !== 'race') {
+      reported = null
+      pending = null
+      return
+    }
     // In the pit lane places come and go; judge it once he's back out.
     if (me.pitStatus) return
     const pos = me.position
@@ -178,9 +186,10 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   const offLap = state.on('lapCompleted', (l) => {
     if (!l.isPlayer) return
     const note = opts.lapNote?.(l)
+    const race = sessionKind(state.snapshot().session?.sessionType) === 'race'
     // Rounded to the tenth here: given milliseconds, the model reads them all out.
     push(
-      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}.${note ? ` ${note}` : ''}`,
+      `Lap ${l.lapNumber} done: ${formatLapTime(Math.round(l.lapTimeMs / 100) * 100).replace(/(\.\d)00$/, '$1')}${l.valid ? '' : ' (invalid)'}, P${l.position}${race ? '' : ' on the timesheet'}.${note ? ` ${note}` : ''}`,
     )
   })
 

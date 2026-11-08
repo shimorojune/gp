@@ -85,7 +85,7 @@ export function statusTag(s: RaceSnapshot): string {
   const parts: string[] = [x.status]
   if (x.track) parts.push(`${x.track} ${x.session ?? ''}`.trim())
   if (x.lap) parts.push(`lap ${x.lap}${x.totalLaps ? `/${x.totalLaps}` : ''}`)
-  if (x.position) parts.push(`P${x.position}`)
+  if (x.position) parts.push(`P${x.position}${x.sessionKind === 'race' ? '' : ' on times'}`)
   if (x.safetyCar && x.safetyCar !== 'None') parts.push(`SC: ${x.safetyCar}`)
   return `[${parts.join(' · ')}]`
 }

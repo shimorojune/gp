@@ -62,6 +62,8 @@ export interface CarSnapshot {
   lastLapMs: number
   bestLapMs: number
   currentLapMs: number
+  /** Metres into the current lap (negative before the line on an out lap). */
+  lapDistanceM: number
   sector: number
   deltaToCarInFrontMs: number
   deltaToLeaderMs: number
@@ -160,6 +162,18 @@ export interface RaceSnapshot {
   /** Sorted by race position; cars with position 0 (inactive) are dropped. */
   cars: CarSnapshot[]
   packetsPerSecond: number
+}
+
+export type SessionKind = 'practice' | 'qualifying' | 'race' | 'time-trial' | 'unknown'
+
+/** What kind of session a SESSION_TYPES name is: each one calls for a different engineer. */
+export function sessionKind(sessionType: string | null | undefined): SessionKind {
+  const t = sessionType ?? ''
+  if (t.startsWith('Race')) return 'race'
+  if (/^Q\d|Qualifying/.test(t)) return 'qualifying'
+  if (/^P\d|Practice/.test(t)) return 'practice'
+  if (t === 'Time Trial') return 'time-trial'
+  return 'unknown'
 }
 
 /**
@@ -517,6 +531,7 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
         lastLapMs: l.lastLapTimeInMS,
         bestLapMs: this.bestLapFor(i),
         currentLapMs: l.currentLapTimeInMS,
+        lapDistanceM: l.lapDistance,
         sector: l.sector,
         deltaToCarInFrontMs: l.deltaToCarInFrontInMS,
         deltaToLeaderMs: l.deltaToRaceLeaderInMS,

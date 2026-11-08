@@ -22,6 +22,7 @@ function car(over: Partial<CarSnapshot>): CarSnapshot {
     lastLapMs: 74000,
     bestLapMs: 73500,
     currentLapMs: 0,
+    lapDistanceM: 0,
     sector: 0,
     deltaToCarInFrontMs: 0,
     deltaToLeaderMs: 0,
@@ -202,5 +203,37 @@ describe('retired cars', () => {
     const v = raceSnapshotView(s)
     expect(v.gapAhead?.driver).toBe('RUSSELL')
     expect(paceTargetsView(s).chase?.driver).toBe('RUSSELL')
+  })
+})
+
+describe('practice and qualifying', () => {
+  const practice = (): RaceSnapshot => {
+    const s = snapshot()
+    s.session = { ...s.session!, sessionType: 'P1', trackLengthM: 5000 }
+    // Timesheet: HAMILTON P6, ROHIT P7, NORRIS P8. On the road: NORRIS 300 m ahead (across
+    // the line), HAMILTON in the garage, VERSTAPPEN 200 m behind on a flying lap.
+    s.cars[0]!.driverStatus = 0
+    s.cars[1]!.lapDistanceM = 4900
+    s.cars[2]!.lapDistanceM = 200
+    s.cars.push(
+      car({ carIdx: 3, name: 'VERSTAPPEN', position: 1, lapDistanceM: 4700, driverStatus: 1 }),
+    )
+    return s
+  }
+  it('uses the cars on the road, not the timesheet', () => {
+    const v = raceSnapshotView(practice()) as Record<string, unknown>
+    expect(v.gapAhead).toBeNull()
+    const t = v.trafficOnTrack as {
+      ahead: { driver: string; metres: number }
+      behind: { driver: string; theirLap: string }
+    }
+    expect(t.ahead.driver).toBe('NORRIS')
+    expect(t.ahead.metres).toBe(300)
+    expect(t.behind.driver).toBe('VERSTAPPEN')
+    expect(t.behind.theirLap).toBe('Flying lap')
+    expect(paceTargetsView(practice()).chase).toBeNull()
+  })
+  it('marks the position as the timesheet', () => {
+    expect(statusTag(practice())).toBe('[live · Brazil P1 · lap 5/18 · P7 on times]')
   })
 })
