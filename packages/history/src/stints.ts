@@ -85,7 +85,10 @@ export function stintModel(
       prev.session_id === r.session_id &&
       prev.tyre === r.tyre &&
       r.lap === prev.lap + 1 &&
-      (r.tyre_age ?? 0) >= (prev.tyre_age ?? 0)
+      // Same set, one lap older (unknown ages are allowed through).
+      (r.tyre_age === null || prev.tyre_age === null || r.tyre_age - prev.tyre_age === 1) &&
+      // Fuel going up means he went back to the garage: a new run.
+      !(r.fuel_kg !== null && prev.fuel_kg !== null && r.fuel_kg > prev.fuel_kg + 1)
     )
       cur.push(r)
     else stints.push([r])
@@ -117,29 +120,34 @@ export function stintModel(
     const w = st.filter((l) => l.wear_pct !== null && l.tyre_age !== null)
     const ws = slope(w.map((l) => [l.tyre_age!, l.wear_pct!]))
     if (ws !== null && ws > 0) c.wear.push(ws)
-    // Pace: clean laps within 3% of the stint's best (drops cool-down and traffic laps).
-    const clean = st.filter((l) => l.valid && !l.flashback && l.lap_ms > 0 && l.tyre_age !== null)
+    // Pace: valid laps within 3% of the stint's best (drops cool-down and traffic laps).
+    // Flashback laps stay in: he uses them a lot and the lap time is still a lap time.
+    const clean = st.filter((l) => l.valid && l.lap_ms > 0 && l.tyre_age !== null)
     const best = Math.min(...clean.map((l) => l.lap_ms))
     const quick = clean.filter((l) => l.lap_ms <= best * 1.03)
-    if (quick.length >= 4) {
+    if (quick.length >= 3) {
       const ps = slope(quick.map((l) => [l.tyre_age!, l.lap_ms]))
       if (ps !== null) c.pace.push(ps)
     }
     byCompound.set(tyre, c)
   }
 
+  const burn = median(burns)
+  // Burning fuel makes the car ~30 ms a lap quicker per kg; take that out to see the tyre.
+  const fuelGainMs = burn ? burn * 30 : 0
   const compounds = [...byCompound.entries()].map(([tyre, c]) => {
     const wear = median(c.wear)
+    const pace = c.pace.length ? median(c.pace)! : null
     return {
       compound: tyre,
       lapsRun: c.laps,
       longestStint: c.longest,
       wearPerLapPct: r1(wear),
       lapsTo70PctWear: wear ? Math.floor(70 / wear) : null,
-      paceLossPerLapMs: c.pace.length ? Math.round(median(c.pace)!) : null,
+      paceLossPerLapMs: pace === null ? null : Math.round(pace),
+      tyreDegPerLapMs: pace === null ? null : Math.round(pace + fuelGainMs),
     }
   })
-  const burn = median(burns)
   return {
     from: scope,
     stints: stints.filter((s) => s.length >= 3).length,
@@ -147,7 +155,7 @@ export function stintModel(
     compounds,
     note:
       compounds.length || burn
-        ? 'From his own laps. Wear per lap and pace loss come from stints of 3+ laps; a short practice run on a compound makes its numbers rough.'
+        ? 'From his own laps. Wear per lap and pace loss come from stints of 3+ laps; a short practice run on a compound makes its numbers rough, and null means unknown. paceLossPerLapMs is what the stopwatch showed; tyreDegPerLapMs adds back the fuel burn-off (~30 ms per kg), i.e. what the tyre alone costs per lap.'
         : 'No usable practice runs here yet: do a run of 5+ laps on each race compound to learn wear, pace drop and fuel use.',
   }
 }
