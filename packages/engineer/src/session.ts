@@ -84,7 +84,17 @@ export function statusTag(s: RaceSnapshot): string {
   const x = situation(s)
   const parts: string[] = [x.status]
   if (x.track) parts.push(`${x.track} ${x.session ?? ''}`.trim())
-  if (x.lap) parts.push(`lap ${x.lap}${x.totalLaps ? `/${x.totalLaps}` : ''}`)
+  // Every turn says what kind of session it is: the cheap model drifts back to race talk.
+  const kind = {
+    practice: 'PRACTICE, not a race',
+    qualifying: 'QUALIFYING, not a race',
+    'time-trial': 'TIME TRIAL',
+    race: null,
+    unknown: null,
+  }[x.sessionKind]
+  if (kind) parts.push(kind)
+  if (x.lap)
+    parts.push(`lap ${x.lap}${x.totalLaps && x.sessionKind === 'race' ? `/${x.totalLaps}` : ''}`)
   if (x.position) parts.push(`P${x.position}${x.sessionKind === 'race' ? '' : ' on times'}`)
   if (x.safetyCar && x.safetyCar !== 'None') parts.push(`SC: ${x.safetyCar}`)
   return `[${parts.join(' · ')}]`

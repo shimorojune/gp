@@ -314,6 +314,7 @@ export type EventDetails =
   | { code: 'FLBK'; flashbackFrameIdentifier: number; flashbackSessionTime: number }
   | { code: 'BUTN'; buttonStatus: number }
   | { code: 'OVTK'; overtakingVehicleIdx: number; beingOvertakenVehicleIdx: number }
+  | { code: 'COLL'; vehicle1Idx: number; vehicle2Idx: number }
   | { code: 'SSTA' | 'SEND' | 'DRSE' | 'DRSD' | 'CHQF' | 'LGOT' | 'RDFL' }
   | { code: string; unknown: true }
 
@@ -368,6 +369,8 @@ function readEventDetails(code: string, r: Reader): EventDetails {
       return { code, buttonStatus: r.u32() }
     case 'OVTK':
       return { code, overtakingVehicleIdx: r.u8(), beingOvertakenVehicleIdx: r.u8() }
+    case 'COLL':
+      return { code, vehicle1Idx: r.u8(), vehicle2Idx: r.u8() }
     case 'SSTA':
     case 'SEND':
     case 'DRSE':

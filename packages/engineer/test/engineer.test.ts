@@ -234,6 +234,8 @@ describe('practice and qualifying', () => {
     expect(paceTargetsView(practice()).chase).toBeNull()
   })
   it('marks the position as the timesheet', () => {
-    expect(statusTag(practice())).toBe('[live · Brazil P1 · lap 5/18 · P7 on times]')
+    expect(statusTag(practice())).toBe(
+      '[live · Brazil P1 · PRACTICE, not a race · lap 5 · P7 on times]',
+    )
   })
 })

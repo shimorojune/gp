@@ -7,6 +7,7 @@ import {
   isDriving,
   sessionKind,
 } from '@gp/telemetry'
+import { IncidentDetector } from './incidents.ts'
 import { SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 
@@ -170,7 +171,26 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     )
   }, pollMs)
 
+  // Spins and impacts, from the player's own car at ~10 Hz.
+  const incidents = new IncidentDetector()
+  const incidentPoll = setInterval(() => {
+    if (closed) return
+    const s = state.snapshot()
+    const inputs = state.playerInputs()
+    if (!isDriving(s) || !inputs) return
+    const mx = state.latestMotionEx
+    for (const line of incidents.update({
+      t: now(),
+      speedKph: inputs.speedKph,
+      localVx: mx?.localVelocityX ?? null,
+      localVz: mx?.localVelocityZ ?? null,
+      damage: s.player?.damage ?? null,
+    }))
+      push(line, 'urgent')
+  }, 100)
+
   const offSession = state.on('sessionStarted', () => {
+    incidents.reset()
     // A restart or a new session: whatever was queued is about the old one.
     queued = []
     reported = null
@@ -195,6 +215,14 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
 
   const offEvent = state.on('event', (e) => {
     const d = e.details
+    if (d.code === 'COLL' && 'vehicle1Idx' in d) {
+      const s = state.snapshot()
+      const me = state.playerCarIndex
+      const other = d.vehicle1Idx === me ? d.vehicle2Idx : d.vehicle2Idx === me ? d.vehicle1Idx : -1
+      if (other >= 0)
+        incidents.contact(now(), s.cars.find((c) => c.carIdx === other)?.name ?? 'another car')
+      return
+    }
     if (d.code === 'PENA' && 'penaltyType' in d) {
       const me = state.snapshot().cars.find((c) => c.isPlayer)
       // Warnings and lap invalidations come every few corners; the game shows those itself.
@@ -224,6 +252,7 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
     closed = true
     if (timer) clearTimeout(timer)
     clearInterval(poll)
+    clearInterval(incidentPoll)
     offSession()
     offLap()
     offEvent()
