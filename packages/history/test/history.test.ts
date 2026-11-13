@@ -129,6 +129,17 @@ describe('HistoryDb', () => {
     expect(hard.wearPerLapPct).toBe(1.7)
   })
 
+  it('lists recent sessions whose debrief never landed', () => {
+    const db = new HistoryDb(':memory:')
+    const laps = [1, 2, 3].map((n) => lap(n, 90000))
+    const now = new Date().toISOString()
+    const a = db.saveSession({ ...record('11', laps), startedAt: now }, 'a.gprec')!
+    const b = db.saveSession({ ...record('12', laps), startedAt: now }, 'b.gprec')!
+    db.saveSession({ ...record('13', laps), startedAt: '2020-01-01T00:00:00.000Z' }, 'c.gprec')
+    db.setSummary(b, 'done')
+    expect(db.undebriefed()).toEqual([a])
+  })
+
   it('merges a career session saved again under a new game id (app restart)', () => {
     const db = new HistoryDb(':memory:')
     const career = (uid: string, laps: LapRecord[]) => ({

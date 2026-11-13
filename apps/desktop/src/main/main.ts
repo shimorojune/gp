@@ -365,7 +365,8 @@ app.whenReady().then(async () => {
       onResult: logIngest,
     })
     afterIngest()
-    await debrief(rs.flatMap((r) => r.ids))
+    // New sessions, plus recent ones whose debrief failed last time.
+    await debrief([...new Set([...history.undebriefed(), ...rs.flatMap((r) => r.ids)])])
   })
   createWindow()
   // Pre-create the overlay (hidden) and warm the engineer so the first answer is quick.

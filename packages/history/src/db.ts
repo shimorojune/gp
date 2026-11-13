@@ -628,6 +628,22 @@ export class HistoryDb {
     return { session: r.session ?? 0, total: r.total, sessions: r.sessions }
   }
 
+  /**
+   * Recent sessions with laps but no debrief (it failed, e.g. Claude was signed out, or the
+   * app closed first), oldest first, so they can be retried on the next start.
+   */
+  undebriefed(days = 7, limit = 3): number[] {
+    const since = new Date(Date.now() - days * 86_400_000).toISOString()
+    const rows = this.db
+      .prepare(
+        `SELECT id FROM (SELECT id, started_at FROM sessions
+           WHERE summary IS NULL AND laps_done >= 3 AND started_at >= ?
+           ORDER BY started_at DESC LIMIT ?) ORDER BY started_at`,
+      )
+      .all(since, limit) as { id: number }[]
+    return rows.map((r) => r.id)
+  }
+
   setSummary(sessionId: number, summary: string): void {
     this.db.prepare('UPDATE sessions SET summary = ? WHERE id = ?').run(summary, sessionId)
   }
