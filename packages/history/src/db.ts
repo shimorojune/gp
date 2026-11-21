@@ -589,14 +589,14 @@ export class HistoryDb {
     return r ? { text: r.text, updatedAt: r.updated_at, editedBy: r.edited_by } : null
   }
 
-  setProfile(text: string, editedBy: 'engineer' | 'driver'): void {
+  setProfile(text: string, editedBy: 'engineer' | 'driver', at = new Date().toISOString()): void {
     this.db
       .prepare(
         `INSERT INTO profile (id, text, updated_at, edited_by) VALUES (1, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET text = excluded.text, updated_at = excluded.updated_at,
            edited_by = excluded.edited_by`,
       )
-      .run(text.trim(), new Date().toISOString(), editedBy)
+      .run(text.trim(), at, editedBy)
   }
 
   addTrackIncident(i: {

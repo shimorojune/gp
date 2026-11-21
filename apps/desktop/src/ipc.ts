@@ -177,6 +177,19 @@ export interface StatusInfo {
   controller: { connected: boolean; transport: 'usb' | 'bluetooth' | null; pushToTalk: string }
   voice: { stt: string; sttFallbackReady: boolean; tts: string; speaking: boolean }
   secrets: SecretsStatusInfo
+  /** Postgres sync. configured: DATABASE_URL is set and sync is running. */
+  database: DatabaseInfo
+}
+
+export interface DatabaseInfo {
+  configured: boolean
+  lastSyncAt: string | null
+  /** Sessions not yet in Postgres (or changed since). */
+  pending: number
+  oldestPendingAt: string | null
+  pushed: number
+  pulled: number
+  error: string | null
 }
 
 export interface SetupKeys {

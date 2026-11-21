@@ -14,6 +14,8 @@ import {
 } from '@gp/engineer'
 import {
   HistoryDb,
+  HistorySync,
+  PgStore,
   SessionCollector,
   backfill,
   ingestRecording,
@@ -119,8 +121,11 @@ const CHAT_HOTKEY = process.env.GP_CHAT_HOTKEY ?? 'CommandOrControl+Shift+G'
 /** Keyboard push-to-talk fallback (press to talk, press again to send). Main PTT is the DualSense mute button. */
 const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
 
-/** Raw recordings kept on disk once they're in the history database (~400 MB per race). */
-const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 10)
+/**
+ * Raw recordings kept on disk once they're in the history database (~400 MB per race). What GP
+ * learnt lives in the database (and Postgres); the raw files are only kept for bug reports.
+ */
+const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 2)
 const history = new HistoryDb(join(GP_HOME, 'gp.db'))
 /** Live copy of what the history will record, for corner comparisons during the session. */
 const liveStart = Date.now()
@@ -248,7 +253,37 @@ function queueHistory(job: () => Promise<void>): void {
   historyQueue = historyQueue.then(job).catch((e) => console.error('[history]', e))
 }
 
+/** Postgres sync, once DATABASE_URL is known (from Infisical or .env). */
+let sync: HistorySync | null = null
+const emptySync = {
+  lastSyncAt: null,
+  pending: 0,
+  oldestPendingAt: null,
+  pushed: 0,
+  pulled: 0,
+  error: null,
+}
+function startSync(): void {
+  const url = process.env.DATABASE_URL
+  if (sync || !url) return
+  // First sync ever: keep a copy of the local store as it was before Postgres.
+  const first = !history.db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'")
+    .get()
+  const bak = join(GP_HOME, 'gp.db.bak-pg')
+  if (first && !existsSync(bak)) history.db.exec(`VACUUM INTO '${bak.replace(/'/g, "''")}'`)
+  sync = new HistorySync(history, new PgStore(url))
+  const run = () =>
+    void sync?.sync().then((s) => {
+      if (s.error) console.error(`[sync] ${s.error} (${s.pending} session(s) waiting)`)
+      else if (s.pushed || s.pulled) console.log(`[sync] pushed ${s.pushed}, pulled ${s.pulled}`)
+    })
+  run()
+  setInterval(run, 5 * 60_000)
+}
+
 function afterIngest(): void {
+  void sync?.sync()
   if (!Number.isFinite(KEEP_RECORDINGS) || KEEP_RECORDINGS <= 0) return
   const gone = pruneRecordings(history, RECORDINGS_DIR, KEEP_RECORDINGS, writerPath)
   if (gone.length)
@@ -267,6 +302,8 @@ async function debrief(ids: number[]): Promise<void> {
       console.error(`[history] debrief #${id} failed:`, e instanceof Error ? e.message : e)
     }
   }
+  // The debrief text and profile are part of what Postgres keeps.
+  if (ids.length) void sync?.sync()
 }
 
 function logIngest(r: Awaited<ReturnType<typeof ingestRecording>>): void {
@@ -487,6 +524,7 @@ app.whenReady().then(async () => {
         .join(', ') || 'none'
     }`,
   )
+  startSync()
   ipcMain.handle(IPC.secretsStatus, () => secrets.status())
   ipcMain.handle(IPC.secretsSave, async (_e, cfg) => {
     try {
@@ -494,7 +532,9 @@ app.whenReady().then(async () => {
     } catch (e) {
       return { error: e instanceof Error ? e.message : String(e) }
     }
-    return secrets.refresh()
+    const st = await secrets.refresh()
+    startSync()
+    return st
   })
   ipcMain.handle(IPC.status, (): StatusInfo => {
     const snap = state.snapshot()
@@ -525,6 +565,7 @@ app.whenReady().then(async () => {
       },
       voice: { stt: v.stt, sttFallbackReady: v.sttFallbackReady, tts: v.tts, speaking: v.speaking },
       secrets: secrets.status(),
+      database: { configured: !!sync, ...(sync?.localStatus() ?? emptySync) },
     }
   })
   ipcMain.handle(IPC.secretsTest, (_e, cfg) => secrets.test(cfg))
@@ -611,6 +652,7 @@ function startPreflight(): void {
       telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
       micAccess: () => systemPreferences.getMediaAccessStatus('microphone'),
       secrets: () => secrets.status(),
+      database: async () => (sync ? sync.check() : null),
     }),
     firstRun: !existsSync(join(GP_HOME, '.env')),
   }))

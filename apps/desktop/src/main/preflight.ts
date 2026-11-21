@@ -17,6 +17,18 @@ export interface PreflightDeps {
   micAccess: () => string
   /** Infisical connection and which expected secrets are in the environment. */
   secrets?: () => SecretsStatusInfo
+  /** Postgres: null when DATABASE_URL isn't set. */
+  database?: () => Promise<{
+    connected: boolean
+    version: number | null
+    error: string | null
+    sync: {
+      pending: number
+      oldestPendingAt: string | null
+      lastSyncAt: string | null
+      error: string | null
+    }
+  } | null>
 }
 
 const run = (cmd: string, args: string[]) =>
@@ -70,6 +82,34 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
       status: missing.length === 0 ? 'ok' : 'warn',
       detail: missing.length === 0 ? 'All four found' : `Missing ${missing.join(', ')}`,
     })
+  }
+
+  if (d.database) {
+    const db = await d.database()
+    add({
+      id: 'postgres',
+      label: 'Postgres',
+      status: !db ? 'warn' : db.connected ? 'ok' : 'fail',
+      detail: !db
+        ? 'No DATABASE_URL yet. Add it to Infisical. Until then GP keeps everything on this Mac.'
+        : db.connected
+          ? `Connected, schema version ${db.version}`
+          : `Can't connect: ${db.error}. Sessions wait on this Mac and sync later.`,
+    })
+    if (db) {
+      const waitingMs = db.sync.oldestPendingAt
+        ? Date.now() - Date.parse(db.sync.oldestPendingAt)
+        : 0
+      add({
+        id: 'sync',
+        label: 'Sync',
+        status: db.sync.pending === 0 ? 'ok' : waitingMs > 86_400_000 ? 'warn' : 'ok',
+        detail:
+          db.sync.pending === 0
+            ? `Up to date${db.sync.lastSyncAt ? `, last synced ${db.sync.lastSyncAt.slice(0, 16).replace('T', ' ')} UTC` : ''}`
+            : `${db.sync.pending} session(s) waiting to sync${db.sync.error ? `: ${db.sync.error}` : ''}`,
+      })
+    }
   }
 
   const envFile = join(d.home, '.env')
