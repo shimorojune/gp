@@ -71,9 +71,9 @@ export class RadioVoice {
   // One sentence playing, one being fetched: enough to stay ahead, and when he cuts in the
   // rest of a long answer was never paid for.
   private readonly ttsSlots = new Slots(2)
-  private readonly stt: Stt
+  private stt!: Stt
   private readonly fallbackStt: WhisperStt
-  private readonly tts: Tts | null
+  private tts: Tts | null = null
   private stream: SttStream | null = null
   private pressedAt = 0
   private utt = 0
@@ -91,9 +91,31 @@ export class RadioVoice {
   private stopped = false
   /** Utterance number of an answer to the driver that is still queued or playing. */
   private answering: number | null = null
+  private controller: 'usb' | 'bluetooth' | null = null
 
   constructor(private readonly d: VoiceDeps) {
     this.fallbackStt = new WhisperStt()
+    this.pickEngines()
+  }
+
+  /** For the status view: which engines are in use and what the hardware is doing. */
+  info() {
+    return {
+      stt: this.stt.name,
+      sttFallbackReady: this.fallbackStt.available,
+      tts: this.tts?.name ?? 'mac voice',
+      micRunning: this.mic.running,
+      controller: this.controller,
+      pushToTalk: this.ptt.button,
+      speaking: this.answering !== null,
+    }
+  }
+
+  /**
+   * Choose speech-to-text and the voice from the keys in the environment. Runs again at start(),
+   * because the keys can arrive from Infisical after the app has loaded.
+   */
+  private pickEngines(): void {
     const dg = process.env.DEEPGRAM_API_KEY
     this.stt = dg ? new DeepgramStt(dg) : this.fallbackStt
     const el = process.env.ELEVENLABS_API_KEY
@@ -112,6 +134,7 @@ export class RadioVoice {
   }
 
   start(): void {
+    this.pickEngines()
     this.d.log(
       `[voice] stt=${this.stt.name}${this.stt === this.fallbackStt && !this.fallbackStt.available ? ' (model missing!)' : ''} tts=${this.tts?.name ?? 'mac voice'}`,
     )
@@ -131,13 +154,17 @@ export class RadioVoice {
     })
     this.mic.start()
     this.ptt.on('connected', ({ transport }) => {
+      this.controller = transport
       this.status(`controller connected over ${transport}`)
       if (!this.mic.running) this.mic.start()
       micErrorShown = false
       if (transport === 'bluetooth')
         this.status('the controller mic only works over USB; plug it in or set GP_MIC')
     })
-    this.ptt.on('disconnected', () => this.status('controller disconnected'))
+    this.ptt.on('disconnected', () => {
+      this.controller = null
+      this.status('controller disconnected')
+    })
     this.ptt.on('error', (e) => this.d.log(`[ptt] ${e.message}`))
     this.ptt.on('down', () => this.pressed())
     this.ptt.on('up', () => void this.released())

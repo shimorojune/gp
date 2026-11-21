@@ -24,6 +24,11 @@ export const IPC = {
   radioDone: 'gp:radio-done',
   radioLevel: 'gp:radio-level',
   skinCss: 'gp:skin-css',
+  secretsStatus: 'gp:secrets-status',
+  secretsSave: 'gp:secrets-save',
+  secretsTest: 'gp:secrets-test',
+  secretsClear: 'gp:secrets-clear',
+  status: 'gp:status',
 } as const
 
 export interface NoteItem {
@@ -129,6 +134,51 @@ export interface PreflightResult {
   firstRun: boolean
 }
 
+/** Infisical connection as the settings pane edits it (main/secrets.ts). */
+export interface InfisicalInput {
+  siteUrl: string
+  clientId: string
+  /** Empty keeps the saved one. */
+  clientSecret?: string
+  projectId: string
+  environment: string
+  secretPath: string
+}
+
+export interface SecretsStatusInfo {
+  configured: boolean
+  source: 'infisical' | 'cache' | 'none'
+  fetchedAt: string | null
+  error: string | null
+  /** Expected secret name -> present in the environment. Never the values. */
+  found: Record<string, boolean>
+  config: (Omit<InfisicalInput, 'clientSecret'> & { hasSecret: boolean }) | null
+}
+
+export type SecretsTestResult =
+  | { found: Record<string, boolean>; count: number }
+  | { error: string }
+
+/** Live state for the status view: game, hardware, voice and connections. */
+export interface StatusInfo {
+  at: string
+  game: {
+    /** A packet arrived in the last 3 s. */
+    receiving: boolean
+    lastPacketAgoMs: number | null
+    packetsPerSecond: number
+    port: number
+    mode: string | null
+    track: string | null
+    sessionType: string | null
+  }
+  recording: RecordingState
+  mic: { permission: string; running: boolean }
+  controller: { connected: boolean; transport: 'usb' | 'bluetooth' | null; pushToTalk: string }
+  voice: { stt: string; sttFallbackReady: boolean; tts: string; speaking: boolean }
+  secrets: SecretsStatusInfo
+}
+
 export interface SetupKeys {
   deepgram?: string
   elevenlabs?: string
@@ -190,6 +240,12 @@ export interface GpBridge {
   radioLevel(level: number): void
   /** CSS for the local skin in ~/Documents/GP/skin ('' when there is none). */
   skinCss(): Promise<string>
+  secretsStatus(): Promise<SecretsStatusInfo>
+  /** Saves the connection and fetches again; resolves with an error message when saving fails. */
+  saveSecrets(cfg: InfisicalInput): Promise<SecretsStatusInfo | { error: string }>
+  testSecrets(cfg: InfisicalInput): Promise<SecretsTestResult>
+  clearSecrets(): Promise<SecretsStatusInfo>
+  status(): Promise<StatusInfo>
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */

@@ -20,10 +20,23 @@ import {
   pruneRecordings,
   recentSessionsView,
 } from '@gp/history'
-import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
+import {
+  DEFAULT_PORT,
+  GAME_MODES,
+  RaceState,
+  RecordingWriter,
+  TelemetryListener,
+} from '@gp/telemetry'
 import { inlineSkinCss, skinDir } from '@gp/ui/skin'
 import { gpHome, loadDotEnv } from '@gp/voice'
-import { BrowserWindow, app, globalShortcut, ipcMain, systemPreferences } from 'electron'
+import {
+  BrowserWindow,
+  app,
+  globalShortcut,
+  ipcMain,
+  safeStorage,
+  systemPreferences,
+} from 'electron'
 import HID from 'node-hid'
 import { BUILD } from '../build-info.ts'
 import {
@@ -34,10 +47,12 @@ import {
   type NotesData,
   type RecordingState,
   type SnapshotMessage,
+  type StatusInfo,
   type UpdateState,
 } from '../ipc.ts'
 import { preflight, saveKeys } from './preflight.ts'
 import { RadioCardWindow } from './radio-card.ts'
+import { SecretStore } from './secrets.ts'
 import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
@@ -92,6 +107,12 @@ const CLAUDE_BIN = claudeExecutable()
 const sdk = CLAUDE_BIN ? { pathToClaudeCodeExecutable: CLAUDE_BIN } : {}
 // API keys (Deepgram, ElevenLabs) live in ~/Documents/GP/.env, nowhere else.
 const envFile = loadDotEnv(GP_HOME)
+// Then Infisical (settings pane), which wins: fetched in whenReady, before voice and Claude start.
+const secrets = new SecretStore(GP_HOME, {
+  available: () => safeStorage.isEncryptionAvailable(),
+  encrypt: (text) => safeStorage.encryptString(text),
+  decrypt: (data) => safeStorage.decryptString(data),
+})
 const RECORDINGS_DIR = process.env.GP_RECORDINGS_DIR ?? join(GP_HOME, 'recordings')
 /** Toggles the chat overlay. */
 const CHAT_HOTKEY = process.env.GP_CHAT_HOTKEY ?? 'CommandOrControl+Shift+G'
@@ -457,6 +478,61 @@ app.whenReady().then(async () => {
     return win.isAlwaysOnTop()
   })
 
+  const sec = await secrets.refresh()
+  console.log(
+    `[secrets] ${sec.configured ? `${sec.source}${sec.fetchedAt ? ` (fetched ${sec.fetchedAt})` : ''}${sec.error ? `, ${sec.error}` : ''}` : 'Infisical not set up'}; found ${
+      Object.entries(sec.found)
+        .filter(([, v]) => v)
+        .map(([k]) => k)
+        .join(', ') || 'none'
+    }`,
+  )
+  ipcMain.handle(IPC.secretsStatus, () => secrets.status())
+  ipcMain.handle(IPC.secretsSave, async (_e, cfg) => {
+    try {
+      secrets.saveConfig(cfg)
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+    return secrets.refresh()
+  })
+  ipcMain.handle(IPC.status, (): StatusInfo => {
+    const snap = state.snapshot()
+    const v = voice.info()
+    const ago = lastPacketAt ? Date.now() - lastPacketAt : null
+    return {
+      at: new Date().toISOString(),
+      game: {
+        receiving: ago !== null && ago < 3000,
+        lastPacketAgoMs: ago,
+        packetsPerSecond: snap.packetsPerSecond,
+        port: PORT,
+        mode: snap.session
+          ? (GAME_MODES[snap.session.gameMode] ?? `mode #${snap.session.gameMode}`)
+          : null,
+        track: snap.session?.track ?? null,
+        sessionType: snap.session?.sessionType ?? null,
+      },
+      recording: recordingState(),
+      mic: {
+        permission: systemPreferences.getMediaAccessStatus('microphone'),
+        running: v.micRunning,
+      },
+      controller: {
+        connected: v.controller !== null,
+        transport: v.controller,
+        pushToTalk: v.pushToTalk,
+      },
+      voice: { stt: v.stt, sttFallbackReady: v.sttFallbackReady, tts: v.tts, speaking: v.speaking },
+      secrets: secrets.status(),
+    }
+  })
+  ipcMain.handle(IPC.secretsTest, (_e, cfg) => secrets.test(cfg))
+  ipcMain.handle(IPC.secretsClear, () => {
+    secrets.clear()
+    return secrets.status()
+  })
+
   await listener.start()
   console.log(`[udp] listening on 0.0.0.0:${PORT}`)
   if (SMOKE) {
@@ -534,6 +610,7 @@ function startPreflight(): void {
       port: PORT,
       telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
       micAccess: () => systemPreferences.getMediaAccessStatus('microphone'),
+      secrets: () => secrets.status(),
     }),
     firstRun: !existsSync(join(GP_HOME, '.env')),
   }))
