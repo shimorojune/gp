@@ -65,6 +65,9 @@ importers:
       '@gp/telemetry':
         specifier: workspace:*
         version: link:../../packages/telemetry
+      '@gp/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
       '@gp/voice':
         specifier: workspace:*
         version: link:../../packages/voice

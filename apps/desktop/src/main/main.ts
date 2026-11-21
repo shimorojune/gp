@@ -21,6 +21,7 @@ import {
   recentSessionsView,
 } from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
+import { inlineSkinCss, skinDir } from '@gp/ui/skin'
 import { gpHome, loadDotEnv } from '@gp/voice'
 import { BrowserWindow, app, globalShortcut, ipcMain, systemPreferences } from 'electron'
 import HID from 'node-hid'
@@ -36,6 +37,7 @@ import {
   type UpdateState,
 } from '../ipc.ts'
 import { preflight, saveKeys } from './preflight.ts'
+import { RadioCardWindow } from './radio-card.ts'
 import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
@@ -128,7 +130,28 @@ const engineer = new EngineerSession({
 })
 const toChat = (e: ChatEvent) => chatWin?.webContents.send(IPC.chatEvent, e)
 const toAudio = (m: AudioMessage) => win?.webContents.send(IPC.audio, m)
-const voice = new RadioVoice({ engineer, state, toAudio, toChat, log: (l) => console.log(l) })
+// GP_RADIO_CARD=0 turns the overlay radio card off.
+const radioCard =
+  process.env.GP_RADIO_CARD === '0'
+    ? null
+    : new RadioCardWindow({
+        snapshot: () => state.snapshot(),
+        dir: __dirname,
+        log: (l) => console.log(l),
+      })
+// Dev builds only: lets scripts/screens.mjs put lines on the radio card without a Claude login.
+if (!app.isPackaged && process.env.GP_DEV_HOOKS === '1')
+  Object.assign(globalThis, {
+    __gpDev: { radioLine: (who: 'gp' | 'driver', text: string) => radioCard?.line(who, text) },
+  })
+const voice = new RadioVoice({
+  engineer,
+  state,
+  toAudio,
+  toChat,
+  log: (l) => console.log(l),
+  onRadio: ({ who, text }) => void radioCard?.line(who, text),
+})
 engineer.on('delta', ({ id, kind, text }) => {
   if (kind === 'ask') toChat({ type: 'delta', id, text })
 })
@@ -284,8 +307,9 @@ function createWindow(): void {
   )
   win.on('closed', () => {
     win = null
-    // The hidden overlay would otherwise keep the app alive.
+    // The hidden overlays would otherwise keep the app alive.
     chatWin?.destroy()
+    radioCard?.destroy()
   })
 }
 
@@ -346,6 +370,18 @@ app.on('second-instance', () => {
 
 app.whenReady().then(async () => {
   ipcMain.handle(IPC.appInfo, () => appInfo())
+  // Fonts you own in ~/Documents/GP/skin, inlined (the renderers can't read that folder).
+  let skin: string | null = null
+  ipcMain.handle(IPC.skinCss, () => {
+    try {
+      skin ??= inlineSkinCss()
+      if (skin) console.log(`[skin] using ${skinDir()}`)
+    } catch (e) {
+      console.error('[skin]', e instanceof Error ? e.message : e)
+      skin = ''
+    }
+    return skin
+  })
   ipcMain.handle(IPC.chatAsk, async (_e, text: string) => {
     try {
       const r = await engineer.ask(text)
@@ -426,6 +462,7 @@ app.whenReady().then(async () => {
   if (SMOKE) {
     createWindow()
     chatWin = createChatWindow()
+    radioCard?.create()
     await smokeTest()
     return
   }
@@ -442,6 +479,7 @@ app.whenReady().then(async () => {
   createWindow()
   // Pre-create the overlay (hidden) and warm the engineer so the first answer is quick.
   chatWin = createChatWindow()
+  radioCard?.create()
   engineer.start()
   voice.start()
   startUpdater()
@@ -563,6 +601,17 @@ async function smokeTest(): Promise<void> {
   }
   await check('dashboardVersion', () => shownVersion(win))
   await check('overlayVersion', () => shownVersion(chatWin))
+  // The radio card page and its bundled fonts load (gp-ui.css next to the renderer HTML).
+  if (radioCard)
+    await check('radioCard', async () => {
+      const w = radioCard.window
+      await loaded(w)
+      const ok = await w!.webContents.executeJavaScript(
+        "getComputedStyle(document.body).getPropertyValue('--gp-color-surface').trim()",
+      )
+      if (!ok) throw new Error('gp-ui.css not loaded')
+      return ok
+    })
   // The running GP owns the hotkey while the updater checks a new version beside it.
   if (!process.env.GP_SMOKE_BESIDE_RUNNING)
     await check('hotkey', () => {

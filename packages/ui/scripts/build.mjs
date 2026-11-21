@@ -2,19 +2,12 @@
 // standalone style guide at dist/styleguide/index.html. Tokens are read straight from
 // src/tokens.ts (Node strips the types).
 import { execFileSync } from 'node:child_process'
-import {
-  copyFileSync,
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from 'node:fs'
+import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tokensCss } from '../src/css-vars.ts'
+import { skinCss, skinDir, skinFonts } from '../src/skin.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const dist = join(root, 'dist')
@@ -52,38 +45,17 @@ const css = [
 writeFileSync(join(dist, 'gp-ui.css'), css)
 console.log(`@gp/ui: dist/gp-ui.css (${(css.length / 1024).toFixed(1)} KB)`)
 
-/**
- * Local skin (docs/DESIGN.md): font files you own in ~/Documents/GP/skin (or GP_SKIN_DIR) become
- * 'GP Skin Display', and skin.css there is appended. Only goes into the local style-guide build,
- * never into the repo or a release.
- */
+/** Local skin (docs/DESIGN.md), copied into the local style-guide build only. */
 function localSkin(out) {
-  const dir = process.env.GP_SKIN_DIR || join(homedir(), 'Documents', 'GP', 'skin')
-  if (!existsSync(dir)) return ''
-  const faces = []
-  for (const f of readdirSync(dir)) {
-    const ext = f.match(/\.(woff2?|otf|ttf)$/i)?.[1].toLowerCase()
-    if (!ext || /italic/i.test(f)) continue
-    // Weight from the file name. The TV names use the Wide cut, so it fills the 800 slot.
-    const weight = /black|heavy/i.test(f)
-      ? 900
-      : /wide/i.test(f)
-        ? 800
-        : /bold/i.test(f)
-          ? 700
-          : 400
+  const dir = skinDir()
+  const fonts = skinFonts(dir)
+  for (const f of fonts) {
     mkdirSync(join(out, 'skin'), { recursive: true })
-    copyFileSync(join(dir, f), join(out, 'skin', f))
-    const format = { woff2: 'woff2', woff: 'woff', otf: 'opentype', ttf: 'truetype' }[ext]
-    faces.push(
-      `@font-face { font-family: 'GP Skin Display'; font-weight: ${weight}; font-style: normal; font-display: swap; src: url('./skin/${encodeURIComponent(f)}') format('${format}'); }`,
-    )
-    console.log(`@gp/ui: local skin font ${f} -> weight ${weight}`)
+    copyFileSync(join(dir, f.file), join(out, 'skin', f.file))
+    console.log(`@gp/ui: local skin font ${f.file} -> weight ${f.weight}`)
   }
-  const extra = existsSync(join(dir, 'skin.css')) ? readFileSync(join(dir, 'skin.css'), 'utf8') : ''
-  return faces.length || extra
-    ? `\n/* Local skin from ${dir} */\n${faces.join('\n')}\n${extra}`
-    : ''
+  const css = skinCss((f) => `./skin/${encodeURIComponent(f.file)}`, dir)
+  return css ? `\n${css}` : ''
 }
 
 if (args.has('--styleguide')) {

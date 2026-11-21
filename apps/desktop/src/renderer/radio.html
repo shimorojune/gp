@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    />
+    <title>GP radio card</title>
+    <link rel="stylesheet" href="gp-ui.css" />
+    <style>
+      /* A click-through, transparent window over the game: only the card is drawn. */
+      html,
+      body {
+        height: 100%;
+        background: transparent;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        justify-content: flex-end;
+        align-items: flex-start;
+        padding: var(--gp-space-5);
+        user-select: none;
+        cursor: default;
+      }
+      .gp-radio.enter {
+        animation: gp-radio-in var(--gp-motion-base) var(--gp-motion-ease);
+      }
+      @keyframes gp-radio-in {
+        from {
+          opacity: 0;
+        }
+      }
+      /* Long answers: the card stays glanceable, the full text is in the chat panel. */
+      .gp-radio-line {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 4;
+        overflow: hidden;
+      }
+    </style>
+  </head>
+  <body class="gp-app" style="background: transparent">
+    <div id="card"></div>
+    <script src="radio.js"></script>
+  </body>
+</html>

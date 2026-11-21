@@ -1,4 +1,5 @@
 import { type ChatBridge, versionLabel } from '../ipc.ts'
+import { applySkin, spokenText } from './text.ts'
 
 declare global {
   interface Window {
@@ -13,22 +14,14 @@ const bubbles = new Map<number, HTMLElement>()
 /** Raw streamed text per reply, so a <break /> tag split across deltas still gets hidden. */
 const raw = new Map<number, string>()
 
-/** GP writes pause tags for the voice; hide them (and a half-arrived one) on screen. */
-function display(text: string): string {
-  return text
-    .replace(/<break\b[^>]*\/?>/gi, ' ')
-    .replace(/<[^>]*$/, '')
-    .replace(/\s+([,.!?])/g, '$1')
-    .replace(/ {2,}/g, ' ')
-    .trim()
-}
+const display = spokenText
 let busy = false
 
 function add(cls: string, who: string, text: string): HTMLElement {
   const el = document.createElement('div')
   el.className = `msg ${cls}`
   const w = document.createElement('span')
-  w.className = 'who'
+  w.className = 'who gp-label'
   w.textContent = who
   const t = document.createElement('span')
   t.className = 'text'
@@ -78,16 +71,16 @@ window.gpChat.onEvent((e) => {
       break
     }
     case 'radio':
-      add('radio', 'GP RADIO', display(e.text))
+      add('radio', 'GP on the radio', display(e.text))
       break
     case 'heard':
-      meta(add('you', 'YOU (radio)', e.text), `${e.stt} · ${e.sttMs}ms`)
+      meta(add('you', 'You on the radio', e.text), `${e.stt} · ${e.sttMs}ms`)
       break
     case 'voice':
       meta(add('you', '', ''), e.status)
       break
     case 'error':
-      add('err', 'ERROR', e.message)
+      add('err', 'Error', e.message)
       busy = false
       input.disabled = false
       break
@@ -98,7 +91,7 @@ form.addEventListener('submit', (ev) => {
   ev.preventDefault()
   const text = input.value.trim()
   if (!text || busy) return
-  add('you', 'YOU', text)
+  add('you', 'You', text)
   input.value = ''
   busy = true
   input.disabled = true
@@ -109,3 +102,5 @@ window.addEventListener('keydown', (ev) => {
   if (ev.key === 'Escape') window.gpChat.hide()
 })
 window.addEventListener('focus', () => input.focus())
+
+void applySkin(() => window.gpChat.skinCss())

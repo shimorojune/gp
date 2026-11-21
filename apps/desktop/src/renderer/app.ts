@@ -143,6 +143,14 @@ $('ontop').addEventListener('click', async () => {
 
 const player = new RadioPlayer()
 window.gp.onAudio((m) => player.handle(m))
+// GP's voice level to the overlay radio card, only while it talks (and a second after, so the
+// card sees it go quiet).
+let loudAt = 0
+setInterval(() => {
+  const l = player.level()
+  if (l > 0.01) loudAt = Date.now()
+  if (Date.now() - loudAt < 1_000) window.gp.radioLevel(Math.round(l * 100) / 100)
+}, 66)
 
 // ---------------------------------------------------------------- notes tab
 

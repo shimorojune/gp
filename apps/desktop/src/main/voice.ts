@@ -32,6 +32,8 @@ export interface VoiceDeps {
   toAudio: (m: AudioMessage) => void
   toChat: (e: ChatEvent) => void
   log: (line: string) => void
+  /** What goes over the radio, for the overlay radio card: GP's calls and answers, his questions. */
+  onRadio?: (line: { who: 'gp' | 'driver'; text: string }) => void
 }
 
 /** Shorter than this is a bump of the button, not speech. */
@@ -192,6 +194,7 @@ export class RadioVoice {
     this.stopSpeaking()
     this.newUtterance()
     this.d.log(`[voice] speaking radio call as utterance ${this.utt}${urgent ? ' (urgent)' : ''}`)
+    this.d.onRadio?.({ who: 'gp', text })
     this.speak(text, { urgent, dropIfLate: !urgent })
     this.endUtterance()
   }
@@ -280,11 +283,13 @@ export class RadioVoice {
       return
     }
     this.d.toChat({ type: 'heard', text, stt: used, sttMs })
+    this.d.onRadio?.({ who: 'driver', text })
     const live = isDriving(this.d.state.snapshot())
     // On track, speed beats depth: Haiku answers in ~1.5-2s vs ~4.5s for Sonnet (Mac test).
     const model = live ? (process.env.GP_LIVE_MODEL ?? 'haiku') : undefined
     try {
       const r = await this.d.engineer.ask(`[voice] ${text}`, model ? { model } : {})
+      if (r.text.trim()) this.d.onRadio?.({ who: 'gp', text: r.text })
       this.d.toChat({
         type: 'reply',
         id: r.id,

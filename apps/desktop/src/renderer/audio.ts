@@ -12,6 +12,8 @@ export class RadioPlayer {
   private sources = new Set<AudioBufferSourceNode>()
   private openUtt: number | null = null
   private radio = true
+  private analyser: AnalyserNode | null = null
+  private samples: Float32Array<ArrayBuffer> | null = null
 
   private ensure(): AudioContext {
     if (this.ctx) return this.ctx
@@ -36,6 +38,12 @@ export class RadioPlayer {
     const out = ctx.createGain()
     out.gain.value = 0.9
     hp.connect(lp).connect(shaper).connect(comp).connect(out).connect(ctx.destination)
+    // Taps the output for the radio card's waveform.
+    const analyser = ctx.createAnalyser()
+    analyser.fftSize = 512
+    out.connect(analyser)
+    this.analyser = analyser
+    this.samples = new Float32Array(analyser.fftSize)
     this.ctx = ctx
     this.input = hp
     return ctx
@@ -109,6 +117,7 @@ export class RadioPlayer {
     const src = ctx.createBufferSource()
     src.buffer = buf
     src.connect(this.radio ? this.input! : ctx.destination)
+    if (!this.radio && this.analyser) src.connect(this.analyser)
     const at = Math.max(this.playAt, ctx.currentTime + 0.02)
     if (at - ctx.currentTime > 15)
       console.warn(`[audio] chunk scheduled ${(at - ctx.currentTime).toFixed(1)}s ahead`)
@@ -116,6 +125,18 @@ export class RadioPlayer {
     this.playAt = at + buf.duration
     this.sources.add(src)
     src.onended = () => this.sources.delete(src)
+  }
+
+  /** How loud GP is right now, 0..1 (0 when silent). For the radio card's waveform. */
+  level(): number {
+    // The Mac voice plays outside the audio graph: no level, but it is talking.
+    if (typeof speechSynthesis !== 'undefined' && speechSynthesis.speaking) return 0.5
+    if (!this.analyser || !this.samples || !this.sources.size) return 0
+    this.analyser.getFloatTimeDomainData(this.samples)
+    let sum = 0
+    for (const v of this.samples) sum += v * v
+    const rms = Math.sqrt(sum / this.samples.length)
+    return Math.min(1, rms * 4)
   }
 
   /** Short burst of filtered noise, like a radio keying up or dropping. */

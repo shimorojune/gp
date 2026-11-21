@@ -5,6 +5,8 @@ import {
   type ChatEvent,
   type GpBridge,
   IPC,
+  type RadioBridge,
+  type RadioCardEvent,
   type SnapshotMessage,
   type UpdateState,
 } from '../ipc.ts'
@@ -31,6 +33,8 @@ const bridge: GpBridge = {
   preflight: () => ipcRenderer.invoke(IPC.preflight),
   saveKeys: (keys) => ipcRenderer.invoke(IPC.saveKeys, keys),
   relaunch: () => ipcRenderer.send(IPC.relaunch),
+  radioLevel: (level) => ipcRenderer.send(IPC.radioLevel, level),
+  skinCss: () => ipcRenderer.invoke(IPC.skinCss),
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)
@@ -42,6 +46,17 @@ const chat: ChatBridge = {
   onEvent(cb) {
     ipcRenderer.on(IPC.chatEvent, (_e, ev: ChatEvent) => cb(ev))
   },
+  skinCss: () => ipcRenderer.invoke(IPC.skinCss),
 }
 
 contextBridge.exposeInMainWorld('gpChat', chat)
+
+const radio: RadioBridge = {
+  onEvent(cb) {
+    ipcRenderer.on(IPC.radioCard, (_e, ev: RadioCardEvent) => cb(ev))
+  },
+  done: () => ipcRenderer.send(IPC.radioDone),
+  skinCss: () => ipcRenderer.invoke(IPC.skinCss),
+}
+
+contextBridge.exposeInMainWorld('gpRadio', radio)

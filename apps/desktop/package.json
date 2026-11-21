@@ -19,6 +19,7 @@
     "@gp/history": "workspace:*",
     "@gp/shared": "workspace:*",
     "@gp/telemetry": "workspace:*",
+    "@gp/ui": "workspace:*",
     "@gp/voice": "workspace:*",
     "node-hid": "^3.1.2"
   },

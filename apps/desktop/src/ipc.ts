@@ -20,6 +20,10 @@ export const IPC = {
   preflight: 'gp:preflight',
   saveKeys: 'gp:save-keys',
   relaunch: 'gp:relaunch',
+  radioCard: 'gp:radio-card',
+  radioDone: 'gp:radio-done',
+  radioLevel: 'gp:radio-level',
+  skinCss: 'gp:skin-css',
 } as const
 
 export interface NoteItem {
@@ -77,6 +81,20 @@ export type ChatEvent =
   | { type: 'heard'; text: string; stt: string; sttMs: number }
   | { type: 'voice'; status: string }
   | { type: 'error'; message: string }
+
+/** Pushed to the overlay radio card window. */
+export type RadioCardEvent =
+  | {
+      type: 'line'
+      who: 'gp' | 'driver'
+      text: string
+      /** Your driver's name from the game, as it's shown on the card ('Team' before telemetry). */
+      driver: string
+      number: number | null
+      teamId: number | null
+    }
+  /** GP's voice level, 0..1, while it plays (relayed from the dashboard's audio). */
+  | { type: 'level'; level: number }
 
 export interface RecordingState {
   recording: boolean
@@ -168,6 +186,10 @@ export interface GpBridge {
   /** Writes ~/Documents/GP/.env; GP needs a restart to use the keys. */
   saveKeys(keys: SetupKeys): Promise<{ file: string } | { error: string }>
   relaunch(): void
+  /** GP's voice level while it plays, for the radio card's waveform. */
+  radioLevel(level: number): void
+  /** CSS for the local skin in ~/Documents/GP/skin ('' when there is none). */
+  skinCss(): Promise<string>
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */
@@ -176,4 +198,13 @@ export interface ChatBridge {
   hide(): void
   appInfo(): Promise<AppInfo>
   onEvent(cb: (e: ChatEvent) => void): void
+  skinCss(): Promise<string>
+}
+
+/** What the radio card window's preload exposes on `window.gpRadio`. */
+export interface RadioBridge {
+  onEvent(cb: (e: RadioCardEvent) => void): void
+  /** The card has faded out: the window can hide. */
+  done(): void
+  skinCss(): Promise<string>
 }
