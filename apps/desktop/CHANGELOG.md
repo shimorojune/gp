@@ -1,5 +1,12 @@
 # GP changelog
 
+## [0.5.0](https://github.com/shimorojune/gp/compare/v0.4.2...v0.5.0) (2026-11-21)
+
+### Features
+
+* **desktop:** ask GP chat over all your history ([8728d90](https://github.com/shimorojune/gp/commit/8728d904ccb666c6b3ffeeef48ab66c9fce79eaa))
+* **desktop:** new-season prompt, restart screen and library keys ([4e60db3](https://github.com/shimorojune/gp/commit/4e60db3ba3f56d78b02df7379b838715a569b373))
+
 ## [0.4.2](https://github.com/shimorojune/gp/compare/v0.4.1...v0.4.2) (2026-11-21)
 
 ### Bug Fixes
