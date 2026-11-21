@@ -71,7 +71,7 @@ await Promise.all([
     target: 'chrome120',
   }),
 ])
-for (const page of ['index.html', 'chat.html', 'radio.html'])
+for (const page of ['index.html', 'chat.html', 'radio.html', 'screens.css'])
   cpSync(`src/renderer/${page}`, `dist/renderer/${page}`)
 cpSync(join(ui, 'dist', 'gp-ui.css'), 'dist/renderer/gp-ui.css')
 cpSync(join(ui, 'dist', 'fonts'), 'dist/renderer/fonts', { recursive: true })

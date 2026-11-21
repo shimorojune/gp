@@ -376,12 +376,19 @@ async function toggleRecording(): Promise<RecordingState> {
   return recordingState()
 }
 
+/** macOS mic permission; Linux (the cloud test harness) has no such API and no prompt. */
+const micAccess = () =>
+  process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted'
+
 function createWindow(): void {
+  // UI-only block (renderer thread): the debrief window, sized for the library plus a session.
   win = new BrowserWindow({
-    width: 640,
-    height: 720,
+    width: 1240,
+    height: 800,
+    minWidth: 720,
+    minHeight: 560,
     title: 'GP',
-    backgroundColor: '#0d0f12',
+    backgroundColor: '#0e0e10',
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -624,7 +631,7 @@ app.whenReady().then(async () => {
       },
       recording: recordingState(),
       mic: {
-        permission: systemPreferences.getMediaAccessStatus('microphone'),
+        permission: micAccess(),
         running: v.micRunning,
       },
       controller: {
@@ -730,7 +737,7 @@ function startPreflight(): void {
       home: GP_HOME,
       port: PORT,
       telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
-      micAccess: () => systemPreferences.getMediaAccessStatus('microphone'),
+      micAccess,
       secrets: () => secrets.status(),
       database: async () => (sync ? sync.check() : null),
     }),
