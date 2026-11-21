@@ -1,5 +1,11 @@
 # GP changelog
 
+## [0.2.1](https://github.com/shimorojune/gp/compare/v0.2.0...v0.2.1) (2026-11-21)
+
+### Bug Fixes
+
+* **desktop:** legacy 16/32px reps in the app icon ([bd8c02d](https://github.com/shimorojune/gp/commit/bd8c02dcfae600608ced3ad100fef4059501bbd2))
+
 ## [0.2.0](https://github.com/shimorojune/gp/compare/v0.1.0...v0.2.0) (2026-11-21)
 
 ### Features
