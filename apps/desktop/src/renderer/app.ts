@@ -1,5 +1,5 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
-import { teamColor } from '@gp/ui'
+import { gpMark, teamColor } from '@gp/ui'
 import {
   type GpBridge,
   type NotesData,
@@ -316,4 +316,5 @@ $('notesList').addEventListener('click', async (e) => {
   if (id) renderNotes(await window.gp.removeNote(id))
 })
 
+$('mark').outerHTML = gpMark({ size: 18, label: '' })
 void applySkin(() => window.gp.skinCss())

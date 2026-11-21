@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:"
     />
     <title>GP radio</title>
     <link rel="stylesheet" href="gp-ui.css" />
@@ -74,23 +74,10 @@
         line-height: var(--gp-type-caption-line);
       }
       form {
-        display: flex;
-        border-top: 1px solid var(--gp-color-border);
+        margin: 0 var(--gp-space-3) var(--gp-space-3);
       }
-      input {
-        flex: 1;
-        border: 0;
-        outline: 0;
-        padding: var(--gp-space-3) var(--gp-space-4);
-        background: transparent;
-        color: var(--gp-color-text);
-        font: inherit;
-      }
-      input:focus-visible {
-        outline: none;
-      }
-      input::placeholder {
-        color: var(--gp-color-text-faint);
+      .gp-composer {
+        padding: 0;
       }
     </style>
   </head>
@@ -98,7 +85,7 @@
     <div class="shell">
       <div class="bar"><span class="gp-label">GP radio<span id="ver" class="ver"></span></span><span class="gp-label">Esc to hide</span></div>
       <div id="log"></div>
-      <form id="form"><input id="input" placeholder="Talk to GP…" autocomplete="off" autofocus /></form>
+      <form id="form" class="gp-composer"><input id="input" class="gp-input" placeholder="Talk to GP…" aria-label="Message" autocomplete="off" autofocus /></form>
     </div>
     <script src="chat.js"></script>
   </body>

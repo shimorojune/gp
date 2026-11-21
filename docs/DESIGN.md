@@ -94,7 +94,12 @@ Added when the dashboard moved over; CSS classes only, no builders.
 | `.gp-panel` | Surface with a `.gp-label` title |
 | `.gp-stats` / `.gp-stat` (`--big`) | Label over value, display face, tabular figures |
 | `.gp-table` (`.num`) | Hairline rows, caps header, tabular figures |
-| `.gp-input` | Text field, textarea, select |
+| `.gp-input` | Text field, textarea, select. Filled (raised surface), 36px, soft white focus ring |
+| `.gp-field` (`-label`, `-hint`) | Caps label above a field, optional hint below |
+| `.gp-composer` | Select + inputs + one button joined into one 40px control (add a note, chat) |
+
+`gpMark({ size, tile, label })` (`src/mark.ts`) draws the app icon's six bars (tallest one red)
+as SVG; the header lockup is the bare mark at 18px next to "GP".
 
 ## In the desktop app
 

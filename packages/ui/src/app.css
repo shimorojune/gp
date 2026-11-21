@@ -171,29 +171,97 @@
   text-align: right;
 }
 
-/* Text fields. */
+/*
+ * Text fields. Filled (raised surface) so they read as places to type, a hairline that brightens
+ * on hover, and a soft white ring on focus. A field can sit in .gp-field with a caps label above
+ * and a hint below. .gp-composer joins a select, a text input and a button into one control.
+ */
 .gp-input {
   width: 100%;
-  min-height: 32px;
-  padding: 6px var(--gp-space-3);
+  height: 36px;
+  padding: 0 var(--gp-space-3);
   font: inherit;
   color: var(--gp-color-text);
-  background: var(--gp-color-bg);
+  background: var(--gp-color-surface-raised);
   border: 1px solid var(--gp-color-border);
   border-radius: var(--gp-radius-md);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  transition: border-color var(--gp-motion-fast) var(--gp-motion-ease), box-shadow
+    var(--gp-motion-fast) var(--gp-motion-ease);
 }
 .gp-input::placeholder {
   color: var(--gp-color-text-faint);
 }
-.gp-input:focus {
+.gp-input:hover {
+  border-color: color-mix(in srgb, var(--gp-color-text-faint) 70%, var(--gp-color-border));
+}
+.gp-input:focus,
+.gp-composer:focus-within {
   outline: none;
   border-color: var(--gp-color-text-muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--gp-color-text) 10%, transparent);
 }
 textarea.gp-input {
-  min-height: 140px;
+  height: auto;
+  min-height: 160px;
+  padding: var(--gp-space-3);
   resize: vertical;
   line-height: var(--gp-type-body-line);
 }
 select.gp-input {
   width: auto;
+  padding-right: 30px;
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3a7b1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+.gp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.gp-field-label {
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-size: var(--gp-type-caption-size);
+  line-height: var(--gp-type-caption-line);
+  font-weight: var(--gp-font-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gp-color-text-muted);
+}
+.gp-field-hint {
+  font-size: var(--gp-type-caption-size);
+  line-height: var(--gp-type-caption-line);
+  color: var(--gp-color-text-faint);
+}
+
+.gp-composer {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  padding: 0 4px 0 0;
+  background: var(--gp-color-surface-raised);
+  border: 1px solid var(--gp-color-border);
+  border-radius: var(--gp-radius-md);
+  transition: border-color var(--gp-motion-fast) var(--gp-motion-ease), box-shadow
+    var(--gp-motion-fast) var(--gp-motion-ease);
+}
+.gp-composer .gp-input {
+  height: 100%;
+  background-color: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.gp-composer > .gp-input + .gp-input {
+  border-left: 1px solid var(--gp-color-border);
+}
+.gp-composer .gp-button {
+  height: 30px;
+  flex: none;
 }

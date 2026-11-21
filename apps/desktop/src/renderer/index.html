@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:; img-src 'self' data:"
     />
     <title>GP</title>
     <link rel="stylesheet" href="gp-ui.css" />
@@ -31,6 +31,9 @@
         margin-bottom: var(--gp-space-3);
       }
       .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
         font-size: var(--gp-type-title-size);
         line-height: var(--gp-type-title-line);
         font-weight: var(--gp-font-heavy);
@@ -114,6 +117,17 @@
       }
 
       /* Notes and Check */
+      .fields {
+        display: grid;
+        gap: var(--gp-space-4);
+        margin-top: var(--gp-space-2);
+      }
+      .add {
+        margin-top: var(--gp-space-4);
+      }
+      .add select.gp-input {
+        flex: none;
+      }
       .lead {
         margin: 0 0 var(--gp-space-3);
         color: var(--gp-color-text-muted);
@@ -176,7 +190,7 @@
   </head>
   <body class="gp-app">
     <header>
-      <span class="brand gp-display">GP</span>
+      <span class="brand gp-display"><span id="mark"></span>GP</span>
       <span class="status"><span id="statusDot" class="gp-dot"></span><span id="status">No data</span></span>
       <span id="pps" class="faint gp-display ver"></span>
       <span class="spacer"></span>
@@ -195,8 +209,10 @@
       <section id="setup" class="gp-panel hidden">
         <span class="gp-label">First-run setup</span>
         <p class="lead">GP keeps its data in ~/Documents/GP. Paste your voice API keys (saved to ~/Documents/GP/.env, only on this Mac). Either can stay empty: GP then uses local whisper or the Mac voice.</p>
-        <div class="row"><input id="dgKey" class="gp-input" placeholder="Deepgram API key (speech to text)" autocomplete="off" /></div>
-        <div class="row"><input id="elKey" class="gp-input" placeholder="ElevenLabs API key (GP's voice)" autocomplete="off" /></div>
+        <div class="fields">
+          <label class="gp-field"><span class="gp-field-label">Deepgram API key</span><input id="dgKey" class="gp-input" placeholder="Paste key" autocomplete="off" spellcheck="false" /><span class="gp-field-hint">Speech to text for your push-to-talk questions</span></label>
+          <label class="gp-field"><span class="gp-field-label">ElevenLabs API key</span><input id="elKey" class="gp-input" placeholder="Paste key" autocomplete="off" spellcheck="false" /><span class="gp-field-hint">GP's voice on the radio</span></label>
+        </div>
         <div class="row"><span class="muted" id="keysSaved"></span><span class="spacer"></span><button id="relaunch" class="gp-button hidden">Restart GP</button><button id="keysSave" class="gp-button gp-button--primary">Save</button></div>
       </section>
       <section class="gp-panel">
@@ -215,14 +231,14 @@
       <section class="gp-panel">
         <span class="gp-label">Notes GP remembers</span>
         <div id="notesList" class="list muted">-</div>
-        <div class="row">
+        <div class="gp-composer add">
           <select id="noteCat" class="gp-input" aria-label="Kind of note">
-            <option>driving</option><option>setup</option><option>radio</option>
-            <option>strategy</option><option>personal</option><option>track</option>
+            <option value="driving">Driving</option><option value="setup">Setup</option><option value="radio">Radio</option>
+            <option value="strategy">Strategy</option><option value="personal">Personal</option><option value="track">Track</option>
           </select>
-          <input id="noteTrack" class="gp-input hidden" placeholder="Track" style="width: 140px" />
-          <input id="noteText" class="gp-input" placeholder="Something GP should remember" />
-          <button id="noteAdd" class="gp-button">Add</button>
+          <input id="noteTrack" class="gp-input hidden" placeholder="Track" aria-label="Track" style="width: 130px; flex: none" />
+          <input id="noteText" class="gp-input" placeholder="Something GP should remember" aria-label="Note" />
+          <button id="noteAdd" class="gp-button gp-button--primary">Add</button>
         </div>
       </section>
       <section class="gp-panel"><span class="gp-label">Recent sessions</span><div id="sessions" class="list muted">-</div></section>
