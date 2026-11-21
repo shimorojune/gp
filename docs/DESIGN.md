@@ -4,9 +4,10 @@ Source: `packages/ui` (`@gp/ui`). Living style guide: `pnpm --filter @gp/ui styl
 `packages/ui/dist/styleguide/index.html` and opens it (macOS). Screenshots: `pnpm --filter @gp/ui screenshot`
 (needs Playwright).
 
-Status (2026-11-21): **base minimum only**, not yet applied to the screens. It holds the
-foundations (colour, type, space, radius, motion) and one component, the radio card. Anything
-else is added when a real screen needs it, not up front.
+Status (2026-11-21): applied to the desktop app (overlay radio card, chat panel, dashboard,
+Notes, Check). It holds the foundations (colour, type, space, radius, motion), the radio card,
+and the small app controls those screens needed. Anything else is added when a real screen
+needs it, not up front.
 
 ## Direction
 
@@ -81,11 +82,31 @@ are skipped. A `skin.css` there is appended too, for `--gp-*` overrides. Use a f
 figures. The desktop app will load the same folder when it moves onto `@gp/ui`. These files never
 go into the repo or a release.
 
-## Using it in the desktop app (next step)
+## App controls (`src/app.css`)
 
-1. Add `"@gp/ui": "workspace:*"` to `apps/desktop`.
-2. In `apps/desktop/build.mjs`, copy `packages/ui/dist/gp-ui.css` and `dist/fonts/` next to the
-   renderer HTML. Turbo's `^build` runs `@gp/ui`'s build first.
-3. Link `gp-ui.css`, put `class="gp-app"` on the body, import builders from `@gp/ui`.
-4. Retire inline `<style>` blocks screen by screen, adding tokens/components only as each screen
-   needs them.
+Added when the dashboard moved over; CSS classes only, no builders.
+
+| Class | Use |
+| --- | --- |
+| `.gp-button` (`--primary`, `aria-pressed`) | Quiet bordered button; primary = white fill, one per screen |
+| `.gp-dot` (`--live`, `--warn`) | Status dot. Red only for live and recording |
+| `.gp-tabs` / `.gp-tab[aria-selected]` | Text tabs with a white underline |
+| `.gp-panel` | Surface with a `.gp-label` title |
+| `.gp-stats` / `.gp-stat` (`--big`) | Label over value, display face, tabular figures |
+| `.gp-table` (`.num`) | Hairline rows, caps header, tabular figures |
+| `.gp-input` | Text field, textarea, select |
+
+## In the desktop app
+
+- `apps/desktop/build.mjs` builds `@gp/ui` and copies `gp-ui.css` and `fonts/` next to the
+  renderer HTML. Pages put `class="gp-app"` on the body.
+- **Overlay radio card** (`renderer/radio.ts`, `main/radio-card.ts`): a transparent,
+  click-through, non-focusable panel in the top right. It shows when GP speaks a call or answer,
+  or you ask over push-to-talk (typed chat stays in the chat panel). Name, number and team colour
+  come from your car in the telemetry ('Team' before the game names you). An answer joins your
+  question on one card; any other line replaces the card. It holds 4.5 to 9 s by length (longer
+  while GP is still talking, 30 s at most), fades over 600 ms, then the window hides. The
+  waveform follows GP's voice level, relayed from the dashboard's audio. `GP_RADIO_CARD=0` turns
+  it off.
+- **Local skin:** the main process inlines `~/Documents/GP/skin` (fonts as data URLs plus
+  `skin.css`, `src/skin.ts`) into every window at startup; restart GP after changing it.

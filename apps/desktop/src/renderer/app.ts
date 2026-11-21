@@ -219,7 +219,7 @@ function renderNotes(d: NotesData): void {
     ? d.notes
         .map(
           (n) =>
-            `<div class="note"><span class="tag gp-label">${esc(n.category)}${n.track ? ` · ${esc(n.track)}` : ''}</span><span class="t">${esc(n.text)}${n.source === 'engineer' ? ' <span class="faint">from GP</span>' : ''}</span><button class="gp-button" data-id="${esc(n.id)}" title="Delete note" aria-label="Delete note">Delete</button></div>`,
+            `<div class="note"><span class="tag gp-label">${esc(n.category)}</span><span class="t">${n.track ? `<span class="where">${esc(n.track)}: </span>` : ''}${esc(n.text)}${n.source === 'engineer' ? ' <span class="faint">from GP</span>' : ''}</span><button class="gp-button" data-id="${esc(n.id)}" title="Delete note" aria-label="Delete note">Delete</button></div>`,
         )
         .join('')
     : 'Nothing yet.'
@@ -301,9 +301,15 @@ $('noteAdd').addEventListener('click', async () => {
   const text = ($('noteText') as HTMLInputElement).value.trim()
   if (!text) return
   const category = ($('noteCat') as HTMLSelectElement).value
-  const track = ($('noteTrack') as HTMLInputElement).value.trim()
+  const track = category === 'track' ? ($('noteTrack') as HTMLInputElement).value.trim() : ''
   renderNotes(await window.gp.addNote({ category, text, ...(track ? { track } : {}) }))
   ;($('noteText') as HTMLInputElement).value = ''
+})
+$('noteCat').addEventListener('change', () =>
+  $('noteTrack').classList.toggle('hidden', ($('noteCat') as HTMLSelectElement).value !== 'track'),
+)
+$('noteText').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('noteAdd').click()
 })
 $('notesList').addEventListener('click', async (e) => {
   const id = (e.target as HTMLElement).dataset.id

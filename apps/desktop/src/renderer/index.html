@@ -139,7 +139,14 @@
       .note .gp-button {
         height: 22px;
         padding: 0 var(--gp-space-2);
+        border-color: transparent;
         color: var(--gp-color-text-faint);
+      }
+      .note:hover .gp-button {
+        color: var(--gp-color-text-muted);
+      }
+      .note .where {
+        color: var(--gp-color-text-muted);
       }
       .sess {
         display: block !important;
@@ -209,13 +216,14 @@
         <span class="gp-label">Notes GP remembers</span>
         <div id="notesList" class="list muted">-</div>
         <div class="row">
-          <select id="noteCat" class="gp-input">
+          <select id="noteCat" class="gp-input" aria-label="Kind of note">
             <option>driving</option><option>setup</option><option>radio</option>
             <option>strategy</option><option>personal</option><option>track</option>
           </select>
-          <input id="noteTrack" class="gp-input" placeholder="Track (track notes only)" style="width: 200px" />
+          <input id="noteTrack" class="gp-input hidden" placeholder="Track" style="width: 140px" />
+          <input id="noteText" class="gp-input" placeholder="Something GP should remember" />
+          <button id="noteAdd" class="gp-button">Add</button>
         </div>
-        <div class="row"><input id="noteText" class="gp-input" placeholder="Something GP should remember" /><button id="noteAdd" class="gp-button">Add</button></div>
       </section>
       <section class="gp-panel"><span class="gp-label">Recent sessions</span><div id="sessions" class="list muted">-</div></section>
     </div>
