@@ -677,6 +677,7 @@ app.whenReady().then(async () => {
       return { error: e instanceof Error ? e.message : String(e) }
     }
     const st = await secrets.refresh()
+    voice.reloadKeys()
     startSync()
     void elevenCredits.refresh()
     return st
@@ -720,6 +721,7 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.secretsTest, (_e, cfg) => secrets.test(cfg))
   ipcMain.handle(IPC.secretsClear, () => {
     secrets.clear()
+    voice.reloadKeys()
     return secrets.status()
   })
 
@@ -794,18 +796,26 @@ async function installUpdate(): Promise<string | null> {
 }
 
 function startPreflight(): void {
-  ipcMain.handle(IPC.preflight, async () => ({
-    checks: await preflight({
-      home: GP_HOME,
-      port: PORT,
-      telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
-      micAccess,
-      secrets: () => secrets.status(),
-      database: async () => (sync ? sync.check() : null),
-    }),
-    firstRun: !secrets.status().configured,
-  }))
-  // The voice pipeline reads the keys at startup.
+  ipcMain.handle(IPC.preflight, async () => {
+    // Re-checking means "look again": fetch the secrets fresh so a key added in Infisical
+    // since start-up shows up here and reaches the voice without a restart.
+    if (secrets.status().configured) {
+      await secrets.refresh()
+      voice.reloadKeys()
+      void elevenCredits.refresh()
+    }
+    return {
+      checks: await preflight({
+        home: GP_HOME,
+        port: PORT,
+        telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
+        micAccess,
+        secrets: () => secrets.status(),
+        database: async () => (sync ? sync.check() : null),
+      }),
+      firstRun: !secrets.status().configured,
+    }
+  })
   ipcMain.on(IPC.relaunch, () => {
     app.relaunch()
     app.quit()

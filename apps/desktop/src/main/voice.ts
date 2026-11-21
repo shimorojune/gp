@@ -94,6 +94,8 @@ export class RadioVoice {
   /** Utterance number of an answer to the driver that is still queued or playing. */
   private answering: number | null = null
   private controller: 'usb' | 'bluetooth' | null = null
+  /** The keys the engines were built with, to rebuild only when they change. */
+  private keys = ''
 
   constructor(private readonly d: VoiceDeps) {
     this.fallbackStt = new WhisperStt()
@@ -120,6 +122,8 @@ export class RadioVoice {
    */
   private pickEngines(): void {
     const dg = process.env.DEEPGRAM_API_KEY
+    const el0 = process.env.ELEVENLABS_API_KEY
+    this.keys = `${dg ?? ''}|${el0 ?? ''}`
     this.stt = dg ? new DeepgramStt(dg) : this.fallbackStt
     const el = process.env.ELEVENLABS_API_KEY
     // Short repeated lines replay from disk instead of costing credits again.
@@ -134,6 +138,17 @@ export class RadioVoice {
     this.tts = el
       ? new CachedTts(new ElevenLabsTts(el), join(gpHome(), 'tts-cache'), variant)
       : null
+  }
+
+  /**
+   * Secrets were fetched again (Infisical saved, disconnected or re-checked): rebuild the speech
+   * engines if the keys changed, so a key added after start-up is used without a restart.
+   */
+  reloadKeys(): void {
+    const next = `${process.env.DEEPGRAM_API_KEY ?? ''}|${process.env.ELEVENLABS_API_KEY ?? ''}`
+    if (next === this.keys) return
+    this.pickEngines()
+    this.d.log(`[voice] keys changed: stt=${this.stt.name} tts=${this.tts?.name ?? 'mac voice'}`)
   }
 
   start(): void {
