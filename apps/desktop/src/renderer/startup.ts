@@ -145,7 +145,6 @@ async function showChecks(
     if (fails) {
       foot.innerHTML = `<span class="gp-dot gp-dot--bad gp-pop"></span><span class="gp-fade-in">${esc(summary)}</span><span class="spacer"></span><button class="gp-button" data-open>Open anyway</button><button class="gp-button gp-button--primary gp-pop" data-fix>Fix in Settings</button>`
       $('[data-fix]', foot).addEventListener('click', () => void done({ to: 'settings' }))
-      $<HTMLButtonElement>('[data-fix]', foot).focus({ preventScroll: true })
     } else {
       foot.innerHTML = `<span class="gp-dot gp-dot--good gp-pop"></span><span class="gp-fade-in">${esc(summary)} Opening GP…</span><span class="spacer"></span><button class="gp-button gp-button--primary gp-pop" data-open>Open GP now</button>`
       auto = setTimeout(() => void done(null), 1400)
@@ -282,7 +281,6 @@ async function firstRun(root: HTMLElement): Promise<void> {
 <div class="row" style="margin-top: 8px"><button class="gp-button gp-button--primary" data-next>Open GP</button></div>`
         $('[data-next]', page).addEventListener('click', () => void finish())
       }
-      page.querySelector<HTMLElement>('[data-next]')?.focus({ preventScroll: true })
     }
     const finish = async () => {
       stop?.()

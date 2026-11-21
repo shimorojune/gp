@@ -649,3 +649,6 @@ textarea.gp-input {
   resize: vertical;
   min-height: 200px;
 }
+.card-head .gp-label {
+  white-space: nowrap;
+}
