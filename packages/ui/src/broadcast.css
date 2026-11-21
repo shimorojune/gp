@@ -5,6 +5,56 @@
  * All values come from --gp-* tokens.
  */
 
+/* ---------- Broadcast surface ---------- */
+
+.gp-strip,
+.gp-tower,
+.gp-radio,
+.gp-banner,
+.gp-bc-panel {
+  position: relative;
+  background: var(--gp-broadcast-texture), var(--gp-broadcast-panel);
+  border: 1px solid var(--gp-broadcast-edge);
+  border-top-color: var(--gp-broadcast-edge-top);
+  border-radius: var(--gp-broadcast-radius);
+  box-shadow: var(--gp-broadcast-shadow);
+}
+/* Slow light sweep across the panel, like the animated broadcast backgrounds. */
+.gp-strip::after,
+.gp-tower::after,
+.gp-radio::after,
+.gp-bc-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gp-broadcast-sheen);
+  background-size: 300% 100%;
+  animation: gp-sheen var(--gp-broadcast-sheen-duration) linear infinite;
+  pointer-events: none;
+}
+@keyframes gp-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gp-strip::after,
+  .gp-tower::after,
+  .gp-radio::after,
+  .gp-bc-panel::after {
+    display: none;
+  }
+}
+[data-gp-motion="reduce"] .gp-strip::after,
+[data-gp-motion="reduce"] .gp-tower::after,
+[data-gp-motion="reduce"] .gp-radio::after,
+[data-gp-motion="reduce"] .gp-bc-panel::after {
+  display: none;
+}
+
 /* ---------- Position tab ---------- */
 
 .gp-postab {
@@ -58,20 +108,17 @@
   flex-direction: column;
   min-width: 280px;
   font-family: var(--gp-font-display);
-  border: 1px solid var(--gp-color-border);
-  border-radius: var(--gp-radius-sm);
   overflow: hidden;
-  background: var(--gp-color-surface);
 }
 .gp-strip-head {
   display: flex;
   align-items: stretch;
   height: 24px;
-  background: var(--gp-color-name-bar);
+  background: var(--gp-broadcast-name-bar);
   color: var(--gp-color-name-bar-text);
 }
 .gp-strip-head .gp-postab {
-  background: var(--gp-color-surface);
+  background: var(--gp-color-surface-sunken);
   color: var(--gp-color-text);
   min-width: 28px;
   font-size: 13px;
@@ -193,17 +240,15 @@
   flex-direction: column;
   min-width: 190px;
   font-family: var(--gp-font-display);
-  border: 1px solid var(--gp-color-border);
-  border-radius: var(--gp-radius-sm);
   overflow: hidden;
-  background: var(--gp-color-surface);
 }
 .gp-tower-head {
   display: flex;
   align-items: baseline;
   gap: var(--gp-space-1-5);
   padding: var(--gp-space-1-5) var(--gp-space-3);
-  border-bottom: 1px solid var(--gp-color-border);
+  background: var(--gp-broadcast-head-panel);
+  border-bottom: 1px solid var(--gp-broadcast-edge);
   font-size: 10.5px;
   font-weight: var(--gp-font-weight-medium);
   font-stretch: var(--gp-font-stretch-wide);
@@ -229,6 +274,9 @@
   font-variant-numeric: tabular-nums;
   font-feature-settings: var(--gp-font-numeric-features);
 }
+.gp-tower-row + .gp-tower-row {
+  border-top: 1px solid var(--gp-broadcast-row-divider);
+}
 .gp-tower-pos {
   font-weight: var(--gp-font-weight-medium);
   color: var(--gp-color-text-muted);
@@ -249,7 +297,7 @@
   text-align: right;
 }
 .gp-tower-row--me {
-  background: var(--gp-color-surface-hover);
+  background: var(--gp-broadcast-me-row);
   box-shadow: inset 2px 0 0 var(--gp-color-accent);
 }
 .gp-tower-row--me .gp-tower-pos,
@@ -273,7 +321,7 @@
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--gp-color-accent-text);
-  border-top: 1px solid var(--gp-color-border);
+  border-top: 1px solid var(--gp-broadcast-edge);
 }
 .gp-tower-live {
   padding: 0 var(--gp-space-3) var(--gp-space-2);
@@ -290,11 +338,7 @@
   flex-direction: column;
   width: 320px;
   font-family: var(--gp-font-display);
-  border: 1px solid var(--gp-overlay-border);
-  border-radius: var(--gp-radius-md);
   overflow: hidden;
-  background: var(--gp-overlay-scrim);
-  box-shadow: var(--gp-elevation-2);
   transition: opacity var(--gp-overlay-fade-out) var(--gp-motion-ease-exit);
 }
 .gp-radio[data-state="in"] {
@@ -308,7 +352,9 @@
   display: flex;
   align-items: center;
   gap: var(--gp-space-2);
-  padding: var(--gp-space-2-5) var(--gp-space-3) 0;
+  padding: var(--gp-space-2) var(--gp-space-3);
+  background: var(--gp-broadcast-head-panel);
+  border-bottom: 1px solid var(--gp-broadcast-edge);
 }
 .gp-radio-head::before {
   content: "";
@@ -341,7 +387,7 @@
   align-items: center;
   gap: 2px;
   height: 14px;
-  margin: var(--gp-space-2) var(--gp-space-3) 0;
+  margin: var(--gp-space-2-5) var(--gp-space-3) 0;
 }
 .gp-radio-wave i {
   flex: 1;
@@ -391,12 +437,9 @@
   height: 32px;
   padding: 0 var(--gp-space-3) 0 0;
   font-family: var(--gp-font-display);
-  background: var(--gp-color-surface);
   color: var(--gp-color-text);
-  border: 1px solid var(--gp-color-border);
-  border-radius: var(--gp-radius-sm);
   overflow: hidden;
-  box-shadow: inset 3px 0 0 var(--_accent);
+  border-left: 3px solid var(--_accent);
 }
 .gp-banner-tag {
   padding-left: var(--gp-space-3);

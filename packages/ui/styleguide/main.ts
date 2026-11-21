@@ -382,8 +382,8 @@ const broadcast = sec(
     ${banner('info', 'Personal best', raw('Monza <span class="gp-num">1:21.004</span>'))}
   </div>
   ${h3('Ghost number card, input cluster')}<div class="sg-row">
-    ${ghostNumber(81, 8, `<div class="gp-card" style="width:320px;background:transparent;display:flex;gap:14px;align-items:center;padding:18px 16px;border-bottom:3px solid ${teamColors[8]}"><span class="gp-postab" style="font-size:30px">1</span><div><div style="font-family:var(--gp-font-display);font-size:14px;font-weight:600;text-transform:uppercase">Oscar</div><div style="font-family:var(--gp-font-display);font-size:24px;font-weight:600;text-transform:uppercase;line-height:1">Piastri</div></div></div>`)}
-    <div class="gp-card">${inputs({ speedKph: 287, throttle: 0.92, brake: 0.0 })} ${inputs({ speedKph: 112, throttle: 0, brake: 0.78 })}</div>
+    ${ghostNumber(81, 8, `<div class="gp-bc-panel" style="width:320px;display:flex;gap:14px;align-items:center;padding:18px 16px;border-bottom:3px solid ${teamColors[8]}"><span class="gp-postab" style="font-size:30px">1</span><div><div style="font-family:var(--gp-font-display);font-size:14px;font-weight:600;text-transform:uppercase">Oscar</div><div style="font-family:var(--gp-font-display);font-size:24px;font-weight:600;text-transform:uppercase;line-height:1">Piastri</div></div></div>`)}
+    <div class="gp-bc-panel" style="padding:12px 16px">${inputs({ speedKph: 287, throttle: 0.92, brake: 0.0 })} ${inputs({ speedKph: 112, throttle: 0, brake: 0.78 })}</div>
   </div>`,
 )
 

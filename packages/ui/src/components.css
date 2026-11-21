@@ -976,9 +976,10 @@ select.gp-input {
 .gp-overlay-panel {
   position: relative;
   padding: var(--gp-overlay-padding);
-  border: 1px solid var(--gp-overlay-border);
-  border-radius: var(--gp-overlay-radius);
-  background: var(--gp-overlay-scrim);
+  border: 1px solid var(--gp-broadcast-edge);
+  border-top-color: var(--gp-broadcast-edge-top);
+  border-radius: var(--gp-broadcast-radius);
+  background: var(--gp-broadcast-texture), var(--gp-broadcast-panel);
   box-shadow: var(--gp-elevation-3);
   text-shadow: var(--gp-overlay-text-shadow);
   transition: opacity var(--gp-overlay-fade-out) var(--gp-motion-ease-exit);
@@ -1074,7 +1075,11 @@ select.gp-input {
 
 /* biome-ignore lint/correctness/noUnknownMediaFeatureName: supported in Chromium, newer than Biome's list */
 @media (prefers-reduced-transparency: reduce) {
-  .gp-overlay-panel {
+  .gp-overlay-panel,
+  .gp-strip,
+  .gp-tower,
+  .gp-radio,
+  .gp-banner {
     background: var(--gp-overlay-scrim-strong);
   }
 }

@@ -157,7 +157,6 @@ export const overlay = {
   fontWeightBody: '600',
   fontWeightCall: '600',
   fontWeightReadout: '600',
-  radius: '8px',
   padding: '12px 16px',
   accentBar: '2px',
   /** Radio card stays up this long after GP stops talking (ms, JS). */
@@ -170,13 +169,39 @@ export const overlay = {
   holdMs: 6000,
 } as const
 
+/**
+ * Broadcast surfaces: the panel treatment for strips, tower, radio card and banners, modelled on
+ * the 2025/26 TV look (dark graded panels, square corners, faint texture, slow sheen). All drawn
+ * with gradients; no image assets.
+ */
+export const broadcast = {
+  panel:
+    'linear-gradient(180deg, rgba(34, 38, 45, 0.96) 0%, rgba(17, 19, 23, 0.97) 55%, rgba(10, 11, 14, 0.98) 100%)',
+  texture:
+    'repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 5px)',
+  headPanel: 'linear-gradient(180deg, rgba(44, 49, 58, 0.97) 0%, rgba(26, 29, 35, 0.97) 100%)',
+  nameBar: 'linear-gradient(180deg, #ffffff 0%, #e9ebee 100%)',
+  rowDivider: 'rgba(255, 255, 255, 0.06)',
+  edge: 'rgba(255, 255, 255, 0.07)',
+  edgeTop: 'rgba(255, 255, 255, 0.12)',
+  meRow:
+    'linear-gradient(90deg, rgba(225, 6, 0, 0.22) 0%, rgba(225, 6, 0, 0.04) 60%, transparent 100%)',
+  sheen:
+    'linear-gradient(105deg, transparent 0%, transparent 40%, rgba(255, 255, 255, 0.06) 50%, transparent 60%, transparent 100%)',
+  sheenDuration: '9s',
+  radius: '0',
+  shadow: '0 10px 30px rgba(0, 0, 0, 0.45)',
+} as const
+
 export const font = {
   /**
    * Display face for numbers, driver names, labels and the whole overlay. 'GP Display' is the
    * bundled Archivo (OFL, variable weight and width). To use a licensed broadcast font, install
-   * it and put its family name first here; it must have tabular figures or lap times will jitter.
+   * it and put its family name first here, or define 'GP Skin Display' in the local skin
+   * (docs/DESIGN.md, "Local skin"). It must have tabular figures or lap times will jitter.
    */
-  display: "'GP Display', 'Archivo Variable', Archivo, 'Inter Variable', -apple-system, sans-serif",
+  display:
+    "'GP Skin Display', 'GP Display', 'Archivo Variable', Archivo, 'Inter Variable', -apple-system, sans-serif",
   /** Width for names and labels in the display face: a little extended, like broadcast type. */
   stretchWide: '112%',
   /** Body text, forms, long notes. */
@@ -267,6 +292,7 @@ export const tokens = {
   palette,
   color,
   team: teamColors,
+  broadcast,
   overlay,
   font,
   type,

@@ -130,6 +130,32 @@ The CSS lives in `components.css` (core) and `broadcast.css`. The TypeScript liv
 | Input cluster | `inputs()` | Speed with throttle and brake bars. Off by default on the overlay. |
 | Overlay panel and callout | `.gp-overlay-panel`, `callout()`, `OverlayFader` | Plain panel for a single spoken line or readout. Fade cycle: in, then dim, then out. |
 
+## Broadcast surface
+
+Strips, the tower, the radio card, banners and the overlay panel share one panel treatment
+(`broadcast` tokens). It is modelled on the 2025/26 TV package:
+- **Panel:** a dark vertical gradient with a faint 135° hairline texture.
+- **Corners:** square, with a brighter top edge.
+- **Headers:** a lighter graded head panel.
+- **Your row:** a red-to-transparent wash.
+- **Sheen:** a slow light sweep (9s), turned off under reduced motion.
+- **Name strap:** a white-to-light-grey gradient.
+
+Everything is drawn with CSS gradients. There are no image files and nothing is taken from F1's
+own assets. F1 doesn't publish its broadcast graphics, backgrounds or font for third-party use.
+The graphics are made in-house at Biggin Hill, and the font is licensed. Fan recreations online
+reuse F1's marks and must not go into this public repo.
+
+## Local skin (your own assets, never committed)
+
+Planned with the desktop wiring step:
+- GP loads `~/Documents/GP/skin/skin.css` if it exists, after `gp-ui.css`.
+- That file can `@font-face` a font you own as `'GP Skin Display'`. The display token tries this
+  name first.
+- It can also override any `--gp-*` token, for example `--gp-broadcast-panel` with your own
+  background image.
+- Files in that folder stay on your Mac and are never part of the repo or a release.
+
 ## Overlay rules (while driving)
 
 - **Corners only.** Nothing goes in the middle of the screen, and nothing duplicates the game's
