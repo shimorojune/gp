@@ -1,4 +1,4 @@
-import type { ChatBridge } from '../ipc.ts'
+import { type ChatBridge, versionLabel } from '../ipc.ts'
 
 declare global {
   interface Window {
@@ -46,6 +46,10 @@ function meta(el: HTMLElement, text: string): void {
   el.append(m)
   log.scrollTop = log.scrollHeight
 }
+
+void window.gpChat.appInfo().then((a) => {
+  document.getElementById('ver')!.textContent = versionLabel(a)
+})
 
 window.gpChat.onEvent((e) => {
   switch (e.type) {

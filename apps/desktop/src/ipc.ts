@@ -13,6 +13,7 @@ export const IPC = {
   profileSave: 'gp:profile-save',
   noteAdd: 'gp:note-add',
   noteRemove: 'gp:note-remove',
+  appInfo: 'gp:app-info',
 } as const
 
 export interface NoteItem {
@@ -90,6 +91,17 @@ export interface SnapshotMessage {
   recording: RecordingState
 }
 
+/** Which build is running. */
+export interface AppInfo {
+  version: string
+  commit: string
+  /** false when run from the repo with `pnpm desktop`. */
+  packaged: boolean
+}
+
+/** "v1.2.0 (abc1234)", or "dev 1.2.0 (abc1234)" when run from the repo. */
+export const versionLabel = (a: AppInfo) => `${a.packaged ? 'v' : 'dev '}${a.version} (${a.commit})`
+
 /** What the preload script exposes on `window.gp`. */
 export interface GpBridge {
   onSnapshot(cb: (msg: SnapshotMessage) => void): void
@@ -100,11 +112,13 @@ export interface GpBridge {
   saveProfile(text: string): Promise<NotesData>
   addNote(note: { category: string; text: string; track?: string }): Promise<NotesData>
   removeNote(id: string): Promise<NotesData>
+  appInfo(): Promise<AppInfo>
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */
 export interface ChatBridge {
   ask(text: string): Promise<void>
   hide(): void
+  appInfo(): Promise<AppInfo>
   onEvent(cb: (e: ChatEvent) => void): void
 }

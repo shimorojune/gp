@@ -1,5 +1,5 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
-import type { GpBridge, NotesData, SnapshotMessage } from '../ipc.ts'
+import { type GpBridge, type NotesData, type SnapshotMessage, versionLabel } from '../ipc.ts'
 import { RadioPlayer } from './audio.ts'
 
 declare global {
@@ -98,6 +98,9 @@ function render({ race, listener, recording }: SnapshotMessage): void {
 }
 
 window.gp.onSnapshot(render)
+void window.gp.appInfo().then((a) => {
+  $('ver').textContent = versionLabel(a)
+})
 $('rec').addEventListener('click', () => void window.gp.toggleRecording())
 $('ontop').addEventListener('click', async () => {
   const on = await window.gp.toggleOnTop()

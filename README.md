@@ -6,6 +6,31 @@ A personal AI race engineer for F1 23 (running under CrossOver on macOS). See
 **Phase 1 (telemetry core) is in.** Parser, race state, recorder, replay, and a live dashboard.
 No engineer/voice yet.
 
+## Install the app
+
+Releases are built by CI from `main` (see "Releases" below). Download `GP-<version>-arm64.dmg`
+from the [latest release](https://github.com/shimorojune/gp/releases/latest), drag GP into
+Applications, then (the app is not signed with an Apple Developer ID):
+
+```sh
+xattr -cr /Applications/GP.app
+```
+
+The app keeps everything in `~/Documents/GP/` (`.env` with API keys, `gp.db`, notes,
+recordings, `logs/gp.log`), so it doesn't need the repo. It uses your Claude Code login.
+ffmpeg (mic) and whisper-cli come from Homebrew.
+
+## Releases
+
+Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (a `commit-msg`
+hook checks them): `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major,
+`chore:`/`docs:`/`refactor:`/`test:`/`ci:` → no release. Every push to `main` runs
+`.github/workflows/release.yml`, and semantic-release tags `vX.Y.Z`, updates
+`apps/desktop/CHANGELOG.md` and attaches the zip, dmg and `gp-release.json`.
+
+`pnpm package` builds and smoke-tests the same thing locally on a Mac
+(`apps/desktop/release/`).
+
 ## Setup
 
 Node 22+ and pnpm 10.

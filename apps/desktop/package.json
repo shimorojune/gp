@@ -1,6 +1,8 @@
 {
   "name": "@gp/desktop",
+  "productName": "GP",
   "version": "0.0.0",
+  "description": "GP, a personal AI race engineer for F1 23",
   "private": true,
   "type": "module",
   "main": "dist/main.cjs",
@@ -8,7 +10,8 @@
     "build": "node build.mjs",
     "dev": "node build.mjs && electron .",
     "typecheck": "tsc -p .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "package": "node scripts/package.mjs"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "0.3.319",
@@ -21,6 +24,7 @@
   },
   "devDependencies": {
     "electron": "45.0.0",
+    "electron-builder": "^26.18.0",
     "esbuild": "^0.24.0"
   }
 }

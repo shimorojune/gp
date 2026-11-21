@@ -323,12 +323,13 @@ change again. Practical consequences:
   mode plus Opus debriefs is real volume. The overlay will show tokens per session so we
   can see if you get near the 5-hour limit, and fall back to a cheaper model if so.
 
-### Packaging gotcha
+### Packaging (done 2026-11-21)
 
-The SDK spawns the Claude Code runtime with Node. Inside a packaged Electron app that path
-resolution can break. For a personal app the simple answer is: run it unpackaged (`npm run
-start` from a launch agent or a tiny `.app` wrapper) and point the SDK at your installed
-`claude`. We only fight packaging if you want a proper signed `.app`.
+GP ships as a standalone, ad-hoc signed `GP.app` (arm64, no Apple Developer account).
+`pnpm package` builds it (§10, Phase 8). The SDK finds its native Claude Code binary with
+`require.resolve`, which points into `app.asar` in a packaged app, where nothing can run. The
+binary is unpacked next to it (`asarUnpack`) and the app passes `pathToClaudeCodeExecutable`.
+Auth is still the local Claude Code login.
 
 ## 8. Latency budget
 
@@ -581,6 +582,36 @@ is mostly a practice/quali feature.
 - Post-race debrief with a stronger model.
 - Persona eval set and tuning.
 
+### Phase 8 — Standalone app and releases — **steps 1-2 built 2026-11-21**
+
+1. **Standalone build.** `pnpm package` (on a Mac) → `apps/desktop/release/GP-<v>-arm64.zip`
+   (updates) + `.dmg` (first install) + `gp-release.json` (version, commit, sha256, size).
+   main.cjs bundles all `@gp/*` code; only the Agent SDK (+ its darwin-arm64 binary and peers)
+   and node-hid are installed, with npm into a flat `.stage/` folder. node-hid is an N-API
+   prebuild (ABI-stable, no Electron rebuild); SQLite is `node:sqlite` (built into Electron's
+   Node, no native module). Ad-hoc signed in an afterPack hook. The script then unzips with
+   `ditto`, `codesign --verify`s, and launches `GP --smoke-test` (windows load and show the
+   version, Cmd+Shift+G registers, node-hid loads, history DB opens, bundled `claude --version`
+   runs), so a broken package never gets released. Data stays in `~/Documents/GP/`; logs now
+   also go to `~/Documents/GP/logs/gp.log` (Finder launch has no terminal). PATH gets
+   `/opt/homebrew/bin` added so ffmpeg/whisper-cli are found when opened from Finder.
+   Info.plist has `NSMicrophoneUsageDescription` (macOS asks once for the ffmpeg mic capture).
+2. **Releases.** `.github/workflows/release.yml` on macos-14: lint, typecheck, test, then
+   semantic-release on `main` (config `release.config.mjs`). Conventional commits decide the
+   version (fix → patch, feat → minor, `!`/BREAKING CHANGE → major; chore/docs/refactor/test →
+   no release); it bumps `apps/desktop/package.json` only, writes `apps/desktop/CHANGELOG.md`,
+   tags `vX.Y.Z`, attaches the zip, dmg and `gp-release.json`. `claude/**` branch pushes build
+   + smoke-test the app and upload it as a workflow artifact, no release. commitlint runs in a
+   husky `commit-msg` hook (installed by `pnpm install`). Version shows in the dashboard header
+   and overlay title (`v1.2.0 (abc1234)`, or `dev …` from the repo).
+3. **Next: self-updater.** Stock electron-updater can't work unsigned (Squirrel.Mac needs a real
+   signature). Plan: check `releases/latest` on GitHub (repo is public, no token needed), download
+   `GP-<v>-arm64.zip`, verify sha256 from `gp-release.json`, `ditto -x -k`, `xattr -cr`, helper
+   script swaps `/Applications/GP.app` after quit with a backup and rollback if the new one fails
+   its first launch. Then a first-run setup screen and a pre-flight check.
+
+Install by hand until then: open the dmg, drag GP to Applications, `xattr -cr /Applications/GP.app`.
+
 ### Later / maybe
 
 - Other games (F1 24/25). The parser layer is per-format, so it's mostly a new decoder.
@@ -600,7 +631,7 @@ is mostly a practice/quali feature.
 | CrossOver grabs the DualSense exclusively, so PTT can't see it | Low–medium | Medium | Phase 0 spike; node-hid fallback; keyboard key as last resort |
 | Memory notes drift or contradict each other | Medium | Medium | End-of-session curation pass, editable Notes tab |
 | Chatty mode is annoying or burns usage | Medium | Low | Verbosity setting, token counter in overlay |
-| Electron packaging with SDK subprocess | Medium | Low | Run unpackaged; personal use only, no need for a signed app |
+| Electron packaging with SDK subprocess | Low (solved) | Low | Binary unpacked from asar, explicit executable path, smoke test on every release |
 | F1 23 packet offsets wrong | Low | Medium | Validate against spec and recorded data in Phase 1 |
 | F1 23 unstable under CrossOver on M4 | Low–medium | Fatal | You confirm it runs a full race before anything else |
 | An F1 23 update adds anti-cheat | Low | Fatal (game stops running under Wine) | Nothing to do in the app; parser layer is per-format so another game could slot in |

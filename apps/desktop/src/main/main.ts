@@ -1,5 +1,7 @@
-import { mkdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
+import { createWriteStream, existsSync, mkdirSync, renameSync } from 'node:fs'
+import { join, sep } from 'node:path'
+import { format } from 'node:util'
 import {
   EngineerSession,
   type NoteCategory,
@@ -20,7 +22,10 @@ import {
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
 import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
+import HID from 'node-hid'
+import { BUILD } from '../build-info.ts'
 import {
+  type AppInfo,
   type AudioMessage,
   type ChatEvent,
   IPC,
@@ -32,6 +37,53 @@ import { RadioVoice } from './voice.ts'
 
 const PORT = Number(process.env.GP_UDP_PORT ?? DEFAULT_PORT)
 const GP_HOME = gpHome()
+/** `GP.app/Contents/MacOS/GP --smoke-test`: start up, check the package, print GP_SMOKE {...}, quit. */
+const SMOKE = process.argv.includes('--smoke-test')
+
+// Opened from Finder or the Dock, the app gets launchd's PATH (/usr/bin:/bin:...), which has no
+// Homebrew: ffmpeg (mic) and whisper-cli would go missing. Add the usual places.
+process.env.PATH = [
+  ...new Set([
+    ...(process.env.PATH ?? '').split(':').filter(Boolean),
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+  ]),
+].join(':')
+
+// Opened from Finder there is no terminal, so the log also goes to ~/Documents/GP/logs/gp.log
+// (the previous run's log is kept as gp.prev.log).
+if (!SMOKE) {
+  const logDir = join(GP_HOME, 'logs')
+  mkdirSync(logDir, { recursive: true })
+  const logFile = join(logDir, 'gp.log')
+  if (existsSync(logFile)) renameSync(logFile, join(logDir, 'gp.prev.log'))
+  const out = createWriteStream(logFile, { flags: 'a' })
+  for (const level of ['log', 'warn', 'error'] as const) {
+    const orig = console[level].bind(console)
+    console[level] = (...args: unknown[]) => {
+      orig(...args)
+      out.write(`${new Date().toISOString()} ${format(...args)}\n`)
+    }
+  }
+}
+const appInfo = (): AppInfo => ({ ...BUILD, packaged: app.isPackaged })
+console.log(`[main] GP ${appInfo().packaged ? 'v' : 'dev '}${BUILD.version} (${BUILD.commit})`)
+
+/**
+ * The Agent SDK finds its native Claude Code binary with require.resolve, which inside the
+ * packaged app points into app.asar, where nothing can be executed. The binary ships unpacked
+ * next to it (asarUnpack in scripts/package.mjs); point the SDK there. From the repo the SDK
+ * finds it itself.
+ */
+function claudeExecutable(): string | undefined {
+  if (!app.isPackaged) return undefined
+  const p = require.resolve(
+    `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/claude`,
+  )
+  return p.replace(`${sep}app.asar${sep}`, `${sep}app.asar.unpacked${sep}`)
+}
+const CLAUDE_BIN = claudeExecutable()
+const sdk = CLAUDE_BIN ? { pathToClaudeCodeExecutable: CLAUDE_BIN } : {}
 // API keys (Deepgram, ElevenLabs) live in ~/Documents/GP/.env, nowhere else.
 const envFile = loadDotEnv(GP_HOME)
 const RECORDINGS_DIR = process.env.GP_RECORDINGS_DIR ?? join(GP_HOME, 'recordings')
@@ -66,6 +118,7 @@ const engineer = new EngineerSession({
   liveBest: () => live.liveBest(),
   liveLaps: () => live.live(),
   cwd: engineerCwd,
+  sdk,
   ...(process.env.GP_MODEL ? { model: process.env.GP_MODEL } : {}),
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
 })
@@ -154,7 +207,7 @@ function afterIngest(): void {
 async function debrief(ids: number[]): Promise<void> {
   for (const id of ids) {
     try {
-      const d = await debriefSession(history, id, { cwd: engineerCwd })
+      const d = await debriefSession(history, id, { cwd: engineerCwd, sdk })
       if (!d) continue
       console.log(`[history] debrief #${id}: ${d.summary}`)
       engineer.addContext(`Session debrief saved: ${d.summary} Updated profile: ${d.profile}`)
@@ -281,6 +334,7 @@ app.on('second-instance', () => {
 })
 
 app.whenReady().then(async () => {
+  ipcMain.handle(IPC.appInfo, () => appInfo())
   ipcMain.handle(IPC.chatAsk, async (_e, text: string) => {
     try {
       const r = await engineer.ask(text)
@@ -358,6 +412,12 @@ app.whenReady().then(async () => {
 
   await listener.start()
   console.log(`[udp] listening on 0.0.0.0:${PORT}`)
+  if (SMOKE) {
+    createWindow()
+    chatWin = createChatWindow()
+    await smokeTest()
+    return
+  }
   // Recordings from earlier runs (or ones the app quit before reading) go into the history.
   queueHistory(async () => {
     const rs = await backfill(history, RECORDINGS_DIR, {
@@ -391,6 +451,61 @@ app.whenReady().then(async () => {
     win.webContents.send(IPC.snapshot, msg)
   }, 100)
 })
+
+/** Packaging check, run by scripts/package.mjs on the built app (no Claude login needed). */
+async function smokeTest(): Promise<void> {
+  const r: Record<string, unknown> = { ...appInfo(), home: GP_HOME }
+  const errors: string[] = []
+  const check = async (name: string, fn: () => unknown) => {
+    try {
+      r[name] = await fn()
+    } catch (e) {
+      errors.push(`${name}: ${e instanceof Error ? e.message : String(e)}`)
+    }
+  }
+  const loaded = (w: BrowserWindow | null) =>
+    new Promise<void>((resolve, reject) => {
+      if (!w) return reject(new Error('no window'))
+      if (!w.webContents.isLoading()) return resolve()
+      w.webContents.once('did-finish-load', () => resolve())
+      w.webContents.once('did-fail-load', (_e, _c, d) => reject(new Error(d)))
+    })
+  /** The version label, once the renderer has asked for it over IPC. */
+  const shownVersion = async (w: BrowserWindow | null) => {
+    await loaded(w)
+    for (let i = 0; i < 50; i++) {
+      const t = String(
+        await w!.webContents.executeJavaScript("document.getElementById('ver').textContent"),
+      )
+      if (t.includes(BUILD.version)) return t
+      await new Promise((res) => setTimeout(res, 100))
+    }
+    throw new Error('version label never showed')
+  }
+  await check('dashboardVersion', () => shownVersion(win))
+  await check('overlayVersion', () => shownVersion(chatWin))
+  await check('hotkey', () => {
+    if (!globalShortcut.isRegistered(CHAT_HOTKEY)) throw new Error(`${CHAT_HOTKEY} not registered`)
+    return CHAT_HOTKEY
+  })
+  // node-hid's native addon (N-API prebuild) loads in this Electron.
+  await check('hidDevices', () => HID.devices().length)
+  await check('claude', () => {
+    if (!CLAUDE_BIN) return 'SDK default (not packaged)'
+    if (!existsSync(CLAUDE_BIN)) throw new Error(`missing ${CLAUDE_BIN}`)
+    const v = execFileSync(CLAUDE_BIN, ['--version'], { encoding: 'utf8', timeout: 30_000 })
+    return `${v.trim()} at ${CLAUDE_BIN}`
+  })
+  // node:sqlite opened ~/Documents/GP/gp.db (or GP_HOME) and the schema is in place.
+  await check('historyDb', () => {
+    history.profile()
+    return join(GP_HOME, 'gp.db')
+  })
+  r.ok = errors.length === 0
+  r.errors = errors
+  console.log(`GP_SMOKE ${JSON.stringify(r)}`)
+  app.exit(errors.length ? 1 : 0)
+}
 
 process.on('uncaughtException', (e) => console.error('[main] uncaught', e))
 process.on('unhandledRejection', (e) => console.error('[main] unhandled rejection', e))

@@ -1,0 +1,68 @@
+# Push to main: typecheck, test, then semantic-release decides from the conventional commits
+# whether there's a new version. If there is, it bumps apps/desktop/package.json, writes the
+# changelog, builds + smoke-tests GP.app, tags vX.Y.Z and attaches the zip, dmg and
+# gp-release.json to a GitHub Release.
+#
+# Push to a claude/** branch: same checks, plus a package build + smoke test, uploaded as a
+# workflow artifact (no release), to try a build before it lands on main.
+name: Release
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Apple Silicon runner: builds and runs the arm64 app natively.
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      # No git hooks in CI (the release commit carries long release notes).
+      HUSKY: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      - name: Release (main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: pnpm exec semantic-release
+
+      - name: Package and smoke test (branch build)
+        if: github.ref != 'refs/heads/main'
+        run: pnpm package
+
+      - name: Upload branch build
+        if: github.ref != 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GP-${{ github.sha }}
+          path: |
+            apps/desktop/release/GP-*-arm64.zip
+            apps/desktop/release/gp-release.json
+          retention-days: 7

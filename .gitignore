@@ -7,3 +7,5 @@ recordings/*.gprec
 !recordings/.gitkeep
 .DS_Store
 .env
+apps/desktop/.stage/
+apps/desktop/release/

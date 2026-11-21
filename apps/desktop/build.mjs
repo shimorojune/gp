@@ -1,8 +1,24 @@
-import { cpSync, mkdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { cpSync, mkdirSync, readFileSync } from 'node:fs'
 import { build } from 'esbuild'
 
+const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+function commit() {
+  if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7)
+  try {
+    return execFileSync('git', ['rev-parse', '--short=7', 'HEAD'], { encoding: 'utf8' }).trim()
+  } catch {
+    return 'unknown'
+  }
+}
+// Shown in the dashboard and overlay, and what the updater will compare against.
+const define = {
+  __GP_VERSION__: JSON.stringify(version),
+  __GP_COMMIT__: JSON.stringify(commit()),
+}
+
 mkdirSync('dist', { recursive: true })
-const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'node20' }
+const common = { bundle: true, sourcemap: true, logLevel: 'info', target: 'node20', define }
 
 await Promise.all([
   build({

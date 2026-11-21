@@ -21,6 +21,7 @@ const bridge: GpBridge = {
   saveProfile: (text) => ipcRenderer.invoke(IPC.profileSave, text),
   addNote: (note) => ipcRenderer.invoke(IPC.noteAdd, note),
   removeNote: (id) => ipcRenderer.invoke(IPC.noteRemove, id),
+  appInfo: () => ipcRenderer.invoke(IPC.appInfo),
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)
@@ -28,6 +29,7 @@ contextBridge.exposeInMainWorld('gp', bridge)
 const chat: ChatBridge = {
   ask: (text) => ipcRenderer.invoke(IPC.chatAsk, text),
   hide: () => ipcRenderer.send(IPC.chatHide),
+  appInfo: () => ipcRenderer.invoke(IPC.appInfo),
   onEvent(cb) {
     ipcRenderer.on(IPC.chatEvent, (_e, ev: ChatEvent) => cb(ev))
   },

@@ -7,3 +7,5 @@ onlyBuiltDependencies:
   - esbuild
   - "@biomejs/biome"
   - node-hid
+ignoredBuiltDependencies:
+  - electron-winstaller
