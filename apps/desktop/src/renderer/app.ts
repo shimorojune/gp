@@ -1,4 +1,5 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
+import { teamColor } from '@gp/ui'
 import {
   type GpBridge,
   type NotesData,
@@ -8,6 +9,7 @@ import {
   versionLabel,
 } from '../ipc.ts'
 import { RadioPlayer } from './audio.ts'
+import { applySkin } from './text.ts'
 
 declare global {
   interface Window {
@@ -18,56 +20,92 @@ declare global {
 const $ = (id: string) => document.getElementById(id)!
 const esc = (s: string) =>
   s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
-const cell = (k: string, v: string, cls = 'v') =>
-  `<div><div class="k">${k}</div><div class="${cls}">${v}</div></div>`
+const stat = (k: string, v: string, cls = '') =>
+  `<div class="gp-stat ${cls}"><span class="gp-stat-label">${k}</span><div class="gp-stat-value">${v}</div></div>`
+const panel = (title: string, body: string) => `<span class="gp-label">${title}</span>${body}`
+const STATUS: Record<string, [label: string, dot: string]> = {
+  live: ['Live', 'gp-dot--live'],
+  garage: ['In the garage', 'gp-dot--warn'],
+  paused: ['Paused', 'gp-dot--warn'],
+  'no-data': ['No data', ''],
+}
+/** Shows a section once it has something in it. */
+function fill(id: string, html: string): void {
+  const el = $(id)
+  el.innerHTML = html
+  el.classList.remove('hidden')
+}
 
 function render({ race, listener, recording }: SnapshotMessage): void {
-  const status = $('status')
   // Same rule as inGarage() in @gp/telemetry (kept local: the renderer can't load Node code).
   const parked =
     race.status === 'live' &&
     !(race.session?.sessionType ?? '').startsWith('Race') &&
     race.cars.find((c) => c.isPlayer)?.driverStatus === 0
-  const shown = parked ? 'garage' : race.status
-  status.textContent = shown
-  status.className = `pill ${shown}`
-  $('pps').textContent = `${race.packetsPerSecond} pkt/s`
+  const [label, dot] = STATUS[parked ? 'garage' : race.status] ?? [race.status, '']
+  $('status').textContent = label
+  $('statusDot').className = `gp-dot ${dot}`
+  $('pps').textContent = race.status === 'no-data' ? '' : `${race.packetsPerSecond} pkt/s`
 
-  const rec = $('rec')
-  rec.textContent = recording.recording ? `Stop (${recording.packets})` : 'Record'
-  rec.classList.toggle('on', recording.recording)
+  $('recLabel').textContent = recording.recording ? `Recording · ${recording.packets}` : 'Record'
+  $('recDot').classList.toggle('gp-dot--live', recording.recording)
+  $('rec').setAttribute('aria-pressed', String(recording.recording))
 
   const s = race.session
+  const p = race.player
+  const me = race.cars.find((c) => c.isPlayer)
+  if (me) document.body.style.setProperty('--gp-team', teamColor(me.teamId))
+
+  if (s || me) {
+    const lapOf = me && s?.totalLaps ? `Lap ${me.currentLap} of ${s.totalLaps}` : ''
+    const where = [s?.track, s?.sessionType, lapOf].filter(Boolean).map((x) => esc(String(x)))
+    const current = `<span class="${p?.lapInvalid ? 'invalid' : ''}">${formatLapTime(me?.currentLapMs)}</span>`
+    $('hero').innerHTML = `<div class="muted hero-where gp-display">${where.join(' · ')}</div>
+      <div class="pos gp-display">${me ? `P${me.position}` : '-'}</div>
+      <div class="gp-stats">
+        ${stat('Current', current, 'gp-stat--big')}
+        ${stat('Last', formatLapTime(me?.lastLapMs), 'gp-stat--big')}
+        ${stat('Best', `<span class="best">${formatLapTime(p?.bestLapMs)}</span>`, 'gp-stat--big')}
+      </div>`
+  }
+
   if (s) {
     const forecast = s.forecast
       .slice(0, 5)
       .map((f) => `+${f.inMinutes}m ${f.weather} ${f.rainPercent}%`)
       .join(' · ')
-    $('session').innerHTML = `<h2>Session</h2><div class="grid">
-      ${cell('Track', esc(s.track))}${cell('Session', esc(s.sessionType))}
-      ${cell('Laps', s.totalLaps ? String(s.totalLaps) : '-')}${cell('Time left', `${Math.floor(s.timeLeftSec / 60)}m`)}
-      ${cell('Weather', esc(s.weather))}${cell('Track / air', `${s.trackTempC}° / ${s.airTempC}°`)}
-      ${cell('Safety car', esc(s.safetyCar))}${cell('Pit window', s.pitWindowIdealLap ? `L${s.pitWindowIdealLap}–L${s.pitWindowLatestLap}` : '-')}
-    </div><div class="k" style="margin-top:6px">${forecast || 'No forecast'}</div>`
+    fill(
+      'session',
+      panel(
+        'Session',
+        `<div class="gp-stats">
+      ${stat('Laps', s.totalLaps ? String(s.totalLaps) : '-')}${stat('Time left', `${Math.floor(s.timeLeftSec / 60)}m`)}
+      ${stat('Weather', esc(s.weather))}${stat('Track / air', `${s.trackTempC}° / ${s.airTempC}°`)}
+      ${stat('Safety car', esc(s.safetyCar))}${stat('Pit window', s.pitWindowIdealLap ? `L${s.pitWindowIdealLap}–${s.pitWindowLatestLap}` : '-')}
+    </div><div class="forecast">${forecast || 'No forecast'}</div>`,
+      ),
+    )
   }
 
-  const p = race.player
-  const me = race.cars.find((c) => c.isPlayer)
   if (p) {
-    const wheels = (w: number[], d = 0, unit = '') =>
-      `FL ${w[2]!.toFixed(d)}${unit} FR ${w[3]!.toFixed(d)}${unit}<br>RL ${w[0]!.toFixed(d)}${unit} RR ${w[1]!.toFixed(d)}${unit}`
-    $('player').innerHTML = `<h2>Car</h2><div class="grid">
-      ${cell('Position', me ? `P${me.position}` : '-', 'v big')}
-      ${cell('Current', `<span class="${p.lapInvalid ? 'invalid' : ''}">${formatLapTime(me?.currentLapMs)}</span>`, 'v big')}
-      ${cell('Last', formatLapTime(me?.lastLapMs))}${cell('Best', formatLapTime(p.bestLapMs))}
-      ${cell('Speed', `${p.speedKph} km/h`)}${cell('Gear', String(p.gear))}
-      ${cell('Throttle / brake', `${(p.throttle * 100).toFixed(0)} / ${(p.brake * 100).toFixed(0)}`)}${cell('DRS', p.drs ? 'OPEN' : p.drsAllowed ? 'available' : '-')}
-      ${cell('Tyre', me ? `${esc(me.tyreVisual ?? '?')} (${esc(me.tyreActual ?? '?')}), ${me.tyreAgeLaps ?? '?'} laps` : '-')}
-      ${cell('Wear %', wheels(p.tyreWear))}
-      ${cell('Surface °C', wheels(p.tyreSurfaceTemp))}${cell('Pressure psi', wheels(p.tyrePressure, 1))}
-      ${cell('Fuel', `${p.fuelKg.toFixed(1)} kg`)}${cell('Fuel margin', `${p.fuelMarginLaps >= 0 ? '+' : ''}${p.fuelMarginLaps.toFixed(2)} laps`)}
-      ${cell('ERS', `${p.ersPercent.toFixed(0)}%`)}${cell('Brake bias', `${p.brakeBias}%`)}
-    </div>`
+    const wheels = (w: number[], d = 0, unit = '') => {
+      const f = (i: number) => `${w[i]!.toFixed(d)}${unit}`
+      return `<div class="wheels"><span>${f(2)}</span><span>${f(3)}</span><span>${f(0)}</span><span>${f(1)}</span></div>`
+    }
+    fill(
+      'player',
+      panel(
+        'Car',
+        `<div class="gp-stats">
+      ${stat('Tyre', me ? `${esc(me.tyreVisual ?? '?')} <small>${esc(me.tyreActual ?? '')}, ${me.tyreAgeLaps ?? '?'} laps old</small>` : '-')}
+      ${stat('Fuel', `${p.fuelKg.toFixed(1)} kg <small>${p.fuelMarginLaps >= 0 ? '+' : ''}${p.fuelMarginLaps.toFixed(2)} laps margin</small>`)}
+      ${stat('ERS', `${p.ersPercent.toFixed(0)}%`)}${stat('Brake bias', `${p.brakeBias}%`)}
+      ${stat('Wear', wheels(p.tyreWear, 0, '%'))}${stat('Surface', wheels(p.tyreSurfaceTemp, 0, '°'))}
+      ${stat('Pressure psi', wheels(p.tyrePressure, 1))}${stat('Speed', `${p.speedKph} km/h <small>gear ${p.gear}</small>`)}
+      ${stat('Pedals', `${(p.throttle * 100).toFixed(0)} / ${(p.brake * 100).toFixed(0)}`)}${stat('DRS', p.drs ? 'Open' : p.drsAllowed ? 'Available' : '-')}
+    </div>`,
+      ),
+    )
     if (p.laps.length) {
       const rows = p.laps
         .slice(-12)
@@ -77,32 +115,48 @@ function render({ race, listener, recording }: SnapshotMessage): void {
             l,
           ) => `<tr class="${l.valid ? '' : 'invalid'}"><td>${l.lapNumber}</td><td>${formatLapTime(l.lapTimeMs)}</td>
             <td>${formatLapTime(l.sector1Ms)}</td><td>${formatLapTime(l.sector2Ms)}</td><td>${formatLapTime(l.sector3Ms)}</td>
-            <td>${esc(l.tyreVisual ?? '?')} ${l.tyreAgeLaps ?? ''}</td><td>${l.fuelKg?.toFixed(1) ?? ''}</td></tr>`,
+            <td>${esc(l.tyreVisual ?? '?')} ${l.tyreAgeLaps ?? ''}</td><td class="num">${l.fuelKg?.toFixed(1) ?? ''}</td></tr>`,
         )
         .join('')
-      $('laps').innerHTML =
-        `<h2>Laps</h2><table><tr><th>#</th><th>Time</th><th>S1</th><th>S2</th><th>S3</th><th>Tyre</th><th>Fuel</th></tr>${rows}</table>`
+      fill(
+        'laps',
+        panel(
+          'Laps',
+          `<table class="gp-table"><tr><th>Lap</th><th>Time</th><th>S1</th><th>S2</th><th>S3</th><th>Tyre</th><th class="num">Fuel</th></tr>${rows}</table>`,
+        ),
+      )
     }
   }
 
   if (race.cars.length) {
     const rows = race.cars
       .map(
-        (c) => `<tr class="${c.isPlayer ? 'me' : ''}"><td>${c.position}</td><td>${esc(c.name)}</td>
-          <td>${c.position === 1 ? '' : formatDelta(c.deltaToCarInFrontMs)}</td><td>${formatLapTime(c.lastLapMs)}</td>
-          <td>${esc(c.tyreVisual ?? '')} ${c.tyreAgeLaps ?? ''}</td><td>${c.numPitStops}</td></tr>`,
+        (
+          c,
+        ) => `<tr class="${c.isPlayer ? 'me' : ''}"><td>${c.position}</td><td>${esc(displayName(c.name))}</td>
+          <td class="num">${c.position === 1 ? '' : formatDelta(c.deltaToCarInFrontMs)}</td><td class="num">${formatLapTime(c.lastLapMs)}</td>
+          <td>${esc(c.tyreVisual ?? '')} ${c.tyreAgeLaps ?? ''}</td><td class="num">${c.numPitStops}</td></tr>`,
       )
       .join('')
-    $('order').innerHTML =
-      `<h2>Order</h2><table><tr><th>P</th><th>Driver</th><th>Gap</th><th>Last</th><th>Tyre</th><th>Stops</th></tr>${rows}</table>`
+    fill(
+      'order',
+      panel(
+        'Order',
+        `<table class="gp-table"><tr><th>P</th><th>Driver</th><th class="num">Gap</th><th class="num">Last</th><th>Tyre</th><th class="num">Stops</th></tr>${rows}</table>`,
+      ),
+    )
   }
 
   const rejected = Object.entries(listener.rejected)
     .map(([k, v]) => `${k}: ${v}`)
     .join(', ')
   $('diag').innerHTML =
-    `<h2>Listener</h2><div class="muted">UDP 0.0.0.0:${listener.port} · received ${listener.received} · parsed ${listener.parsed}${rejected ? ` · rejected ${esc(rejected)}` : ''}${recording.path ? `<br>recording: ${esc(recording.path)}` : ''}</div>`
+    `UDP 0.0.0.0:${listener.port} · received ${listener.received} · parsed ${listener.parsed}${rejected ? ` · rejected ${esc(rejected)}` : ''}${recording.path ? `<br>Recording to ${esc(recording.path)}` : ''}`
 }
+
+/** 'VERSTAPPEN' -> 'Verstappen', as on the timing screens. */
+const displayName = (n: string) =>
+  n.toLowerCase().replace(/(^|[\s-])\p{L}/gu, (m) => m.toUpperCase())
 
 window.gp.onSnapshot(render)
 
@@ -123,7 +177,7 @@ function renderUpdate(s: UpdateState): void {
   b.title = s.message ?? (s.phase === 'ready' ? 'Quit GP, install the update and reopen' : '')
   b.disabled = s.phase !== 'ready' && s.phase !== 'error'
   b.classList.toggle('hidden', !text)
-  b.classList.toggle('on', s.phase === 'error')
+  b.classList.toggle('gp-button--primary', s.phase === 'ready')
 }
 window.gp.onUpdate(renderUpdate)
 $('update').addEventListener('click', async () => {
@@ -138,7 +192,8 @@ void window.gp.appInfo().then((a) => {
 $('rec').addEventListener('click', () => void window.gp.toggleRecording())
 $('ontop').addEventListener('click', async () => {
   const on = await window.gp.toggleOnTop()
-  $('ontop').classList.toggle('on', on)
+  $('ontop').setAttribute('aria-pressed', String(on))
+  $('ontop').textContent = on ? 'Pinned' : 'Pin'
 })
 
 const player = new RadioPlayer()
@@ -164,7 +219,7 @@ function renderNotes(d: NotesData): void {
     ? d.notes
         .map(
           (n) =>
-            `<div class="note"><span class="k">${esc(n.category)}${n.track ? `: ${esc(n.track)}` : ''}</span><span class="t">${esc(n.text)}${n.source === 'engineer' ? ' <span class="muted">(GP)</span>' : ''}</span><button data-id="${esc(n.id)}">x</button></div>`,
+            `<div class="note"><span class="tag gp-label">${esc(n.category)}${n.track ? ` · ${esc(n.track)}` : ''}</span><span class="t">${esc(n.text)}${n.source === 'engineer' ? ' <span class="faint">from GP</span>' : ''}</span><button class="gp-button" data-id="${esc(n.id)}" title="Delete note" aria-label="Delete note">Delete</button></div>`,
         )
         .join('')
     : 'Nothing yet.'
@@ -172,7 +227,7 @@ function renderNotes(d: NotesData): void {
     ? d.sessions
         .map(
           (x) =>
-            `<div class="sess"><div>${esc(x.date)} · ${esc(x.track)} ${esc(x.type)} <span class="muted">(${x.program === 'career' ? 'career' : 'sim'}, ${esc(x.mode)})</span> · best ${esc(x.best ?? '-')}${x.result ? ` · ${esc(x.result)}` : ''}</div>${x.summary ? `<div class="muted">${esc(x.summary)}</div>` : ''}</div>`,
+            `<div class="sess"><div><span class="gp-display">${esc(x.date)}</span> · ${esc(x.track)} ${esc(x.type)} <span class="faint">${x.program === 'career' ? 'career' : 'sim'}, ${esc(x.mode)}</span> · best <span class="gp-display">${esc(x.best ?? '-')}</span>${x.result ? ` · ${esc(x.result)}` : ''}</div>${x.summary ? `<div class="muted">${esc(x.summary)}</div>` : ''}</div>`,
         )
         .join('')
     : 'No sessions yet.'
@@ -181,19 +236,17 @@ function renderNotes(d: NotesData): void {
 // ---------------------------------------------------------------- views: race / notes / check
 
 type View = 'race' | 'notes' | 'check'
-let view: View = 'race'
 async function show(v: View): Promise<void> {
-  view = v
   $('raceView').classList.toggle('hidden', v !== 'race')
   $('notesView').classList.toggle('hidden', v !== 'notes')
   $('checkView').classList.toggle('hidden', v !== 'check')
-  $('tab').textContent = v === 'notes' ? 'Race' : 'Notes'
-  $('checkTab').textContent = v === 'check' ? 'Race' : 'Check'
+  for (const t of document.querySelectorAll<HTMLElement>('.gp-tab'))
+    t.setAttribute('aria-selected', String(t.dataset.view === v))
   if (v === 'notes') renderNotes(await window.gp.notes())
   if (v === 'check') await runChecks()
 }
-$('tab').addEventListener('click', () => void show(view === 'notes' ? 'race' : 'notes'))
-$('checkTab').addEventListener('click', () => void show(view === 'check' ? 'race' : 'check'))
+for (const t of document.querySelectorAll<HTMLElement>('.gp-tab'))
+  t.addEventListener('click', () => void show(t.dataset.view as View))
 
 // ---------------------------------------------------------------- pre-flight + first-run setup
 
@@ -202,12 +255,12 @@ function renderChecks(r: PreflightResult): void {
   $('checks').innerHTML = r.checks
     .map(
       (c) =>
-        `<div class="check ${c.status}"><span class="s">${MARK[c.status]}</span><span class="k" style="width:150px">${esc(c.label)}</span><span class="t">${esc(c.detail)}</span></div>`,
+        `<div class="check ${c.status}"><span class="s">${MARK[c.status]}</span><span class="tag">${esc(c.label)}</span><span class="t">${esc(c.detail)}</span></div>`,
     )
     .join('')
   if (r.firstRun) $('setup').classList.remove('hidden')
   const bad = r.checks.filter((c) => c.status === 'fail').length
-  $('checkTab').classList.toggle('on', bad > 0)
+  $('checkDot').classList.toggle('hidden', bad === 0)
 }
 async function runChecks(): Promise<PreflightResult> {
   const r = await window.gp.preflight()
@@ -256,3 +309,5 @@ $('notesList').addEventListener('click', async (e) => {
   const id = (e.target as HTMLElement).dataset.id
   if (id) renderNotes(await window.gp.removeNote(id))
 })
+
+void applySkin(() => window.gp.skinCss())

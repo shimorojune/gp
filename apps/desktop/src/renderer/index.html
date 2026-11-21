@@ -2,127 +2,230 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self' data:"
+    />
     <title>GP</title>
+    <link rel="stylesheet" href="gp-ui.css" />
     <style>
-      :root {
-        --bg: #0d0f12;
-        --panel: #161a1f;
-        --line: #252b33;
-        --text: #e6e8eb;
-        --muted: #8a939e;
-        --good: #3ccf6e;
-        --warn: #f2b33d;
-        --bad: #ef4b4b;
-        --purple: #b36cff;
-      }
-      * { box-sizing: border-box; }
       body {
-        margin: 0;
-        padding: 12px;
-        background: var(--bg);
-        color: var(--text);
-        font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+        padding: var(--gp-space-5) var(--gp-space-6) var(--gp-space-8);
       }
-      header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-      header h1 { font-size: 15px; margin: 0; letter-spacing: 0.08em; }
-      .pill { padding: 2px 8px; border-radius: 999px; background: var(--panel); color: var(--muted); }
-      .pill.live { color: var(--good); }
-      .pill.paused { color: var(--warn); }
-      .pill.garage { color: var(--warn); }
-      .pill.no-data { color: var(--bad); }
-      .spacer { flex: 1; }
-      button {
-        background: var(--panel); color: var(--text); border: 1px solid var(--line);
-        border-radius: 6px; padding: 4px 10px; font: inherit; cursor: pointer;
+      .hidden {
+        display: none !important;
       }
-      button.on { border-color: var(--bad); color: var(--bad); }
-      section { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
-      section h2 { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; margin: 0 0 6px; }
-      .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 12px; }
-      .k { color: var(--muted); font-size: 11px; }
-      .v { font-size: 15px; }
-      .big { font-size: 22px; }
-      table { width: 100%; border-collapse: collapse; }
-      td, th { padding: 2px 4px; text-align: left; }
-      th { color: var(--muted); font-weight: normal; font-size: 11px; }
-      tr.me td { color: var(--purple); }
-      .invalid { color: var(--bad); }
-      .muted { color: var(--muted); }
-      textarea, input, select {
-        width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
-        border-radius: 6px; padding: 6px; font: inherit;
+      .muted {
+        color: var(--gp-color-text-muted);
       }
-      textarea { min-height: 120px; resize: vertical; }
-      .row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
-      .row select { width: auto; }
-      .note { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid var(--line); }
-      .note .t { flex: 1; }
-      .note button { padding: 0 8px; }
-      .sess { padding: 4px 0; border-bottom: 1px solid var(--line); }
-      .hidden { display: none; }
-      .check { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
-      .check .s { width: 16px; }
-      .check.ok .s { color: var(--good); }
-      .check.warn .s { color: var(--warn); }
-      .check.fail .s { color: var(--bad); }
-      .check .t { flex: 1; }
+      .faint {
+        color: var(--gp-color-text-faint);
+      }
+      .spacer {
+        flex: 1;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: var(--gp-space-3);
+        margin-bottom: var(--gp-space-3);
+      }
+      .brand {
+        font-size: var(--gp-type-title-size);
+        line-height: var(--gp-type-title-line);
+        font-weight: var(--gp-font-heavy);
+        letter-spacing: 0.02em;
+      }
+      .status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--gp-color-text-muted);
+      }
+      .ver {
+        font-size: var(--gp-type-caption-size);
+      }
+      .gp-tabs {
+        margin-bottom: var(--gp-space-5);
+      }
+      .view {
+        display: flex;
+        flex-direction: column;
+        gap: var(--gp-space-4);
+      }
+      .row {
+        display: flex;
+        gap: var(--gp-space-2);
+        align-items: center;
+        margin-top: var(--gp-space-3);
+      }
+
+      /* Race: the numbers you look at first, without a panel. */
+      .hero {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        align-items: end;
+        column-gap: var(--gp-space-6);
+        padding: var(--gp-space-2) 0 var(--gp-space-2);
+      }
+      .pos {
+        font-size: var(--gp-type-number-size);
+        line-height: var(--gp-type-number-line);
+        font-weight: var(--gp-font-heavy);
+        letter-spacing: -0.02em;
+      }
+      .hero-where {
+        grid-column: 1 / -1;
+        margin-bottom: var(--gp-space-3);
+      }
+      .hero .gp-stats {
+        grid-template-columns: repeat(3, auto);
+        justify-content: start;
+        column-gap: var(--gp-space-8);
+      }
+      .invalid {
+        color: var(--gp-color-bad);
+      }
+      .best {
+        color: var(--gp-color-timing-personal);
+      }
+      .wheels {
+        display: grid;
+        grid-template-columns: auto auto;
+        justify-content: start;
+        column-gap: var(--gp-space-3);
+      }
+      tr.me td {
+        color: var(--gp-team, var(--gp-color-text));
+        font-weight: var(--gp-font-semibold);
+      }
+      tr.invalid td {
+        color: var(--gp-color-bad);
+      }
+      .forecast {
+        margin-top: var(--gp-space-4);
+        color: var(--gp-color-text-muted);
+      }
+      .footer {
+        font-size: var(--gp-type-caption-size);
+        line-height: var(--gp-type-caption-line);
+        color: var(--gp-color-text-faint);
+        overflow-wrap: anywhere;
+      }
+
+      /* Notes and Check */
+      .lead {
+        margin: 0 0 var(--gp-space-3);
+        color: var(--gp-color-text-muted);
+      }
+      .list > div {
+        display: flex;
+        gap: var(--gp-space-3);
+        align-items: baseline;
+        padding: var(--gp-space-2) 0;
+        border-bottom: 1px solid var(--gp-color-border);
+      }
+      .list > div:last-child {
+        border-bottom: 0;
+      }
+      .list .t {
+        flex: 1;
+        min-width: 0;
+      }
+      .list .tag {
+        flex: none;
+        width: 92px;
+      }
+      .note .gp-button {
+        height: 22px;
+        padding: 0 var(--gp-space-2);
+        color: var(--gp-color-text-faint);
+      }
+      .sess {
+        display: block !important;
+      }
+      .sess .muted {
+        margin-top: 2px;
+      }
+      .check .s {
+        flex: none;
+        width: 14px;
+        font-weight: var(--gp-font-semibold);
+      }
+      .check.ok .s {
+        color: var(--gp-color-good);
+      }
+      .check.warn .s {
+        color: var(--gp-color-warn);
+      }
+      .check.fail .s {
+        color: var(--gp-color-bad);
+      }
+      .check .tag {
+        width: 150px;
+        color: var(--gp-color-text-muted);
+      }
     </style>
   </head>
-  <body>
+  <body class="gp-app">
     <header>
-      <h1>GP</h1>
-      <span id="ver" class="muted" title="GP version"></span>
-      <span id="status" class="pill no-data">no-data</span>
-      <span id="pps" class="pill">0 pkt/s</span>
+      <span class="brand gp-display">GP</span>
+      <span class="status"><span id="statusDot" class="gp-dot"></span><span id="status">No data</span></span>
+      <span id="pps" class="faint gp-display ver"></span>
       <span class="spacer"></span>
-      <button id="update" class="hidden" title="GP update"></button>
-      <button id="checkTab">Check</button>
-      <button id="tab">Notes</button>
-      <button id="ontop">Pin</button>
-      <button id="rec">Record</button>
+      <button id="update" class="gp-button gp-button--primary hidden" title="GP update"></button>
+      <button id="ontop" class="gp-button" aria-pressed="false" title="Keep this window on top">Pin</button>
+      <button id="rec" class="gp-button" aria-pressed="false"><span id="recDot" class="gp-dot"></span><span id="recLabel">Record</span></button>
     </header>
-    <div id="checkView" class="hidden">
-      <section id="setup" class="hidden">
-        <h2>First-run setup</h2>
-        <div class="muted">GP keeps its data in ~/Documents/GP. Paste your voice API keys (saved to ~/Documents/GP/.env, only on this Mac). Either can stay empty: GP then uses local whisper or the Mac voice.</div>
-        <div class="row"><input id="dgKey" placeholder="Deepgram API key (speech to text)" autocomplete="off" /></div>
-        <div class="row"><input id="elKey" placeholder="ElevenLabs API key (GP's voice)" autocomplete="off" /></div>
-        <div class="row"><span class="k" id="keysSaved"></span><span class="spacer"></span><button id="keysSave">Save</button><button id="relaunch" class="hidden">Restart GP</button></div>
+    <nav class="gp-tabs" role="tablist">
+      <button class="gp-tab" role="tab" data-view="race" aria-selected="true">Race</button>
+      <button class="gp-tab" role="tab" data-view="notes" aria-selected="false">Notes</button>
+      <button class="gp-tab" role="tab" data-view="check" aria-selected="false">Check<span id="checkDot" class="gp-dot gp-dot--warn hidden"></span></button>
+      <span class="spacer"></span>
+      <span id="ver" class="faint ver" title="GP version" style="align-self: center"></span>
+    </nav>
+    <div id="checkView" class="view hidden">
+      <section id="setup" class="gp-panel hidden">
+        <span class="gp-label">First-run setup</span>
+        <p class="lead">GP keeps its data in ~/Documents/GP. Paste your voice API keys (saved to ~/Documents/GP/.env, only on this Mac). Either can stay empty: GP then uses local whisper or the Mac voice.</p>
+        <div class="row"><input id="dgKey" class="gp-input" placeholder="Deepgram API key (speech to text)" autocomplete="off" /></div>
+        <div class="row"><input id="elKey" class="gp-input" placeholder="ElevenLabs API key (GP's voice)" autocomplete="off" /></div>
+        <div class="row"><span class="muted" id="keysSaved"></span><span class="spacer"></span><button id="relaunch" class="gp-button hidden">Restart GP</button><button id="keysSave" class="gp-button gp-button--primary">Save</button></div>
       </section>
-      <section>
-        <h2>Pre-flight</h2>
-        <div id="checks" class="muted">Checking…</div>
-        <div class="row"><span class="spacer"></span><button id="keysShow">API keys</button><button id="checkRun">Check again</button></div>
+      <section class="gp-panel">
+        <span class="gp-label">Pre-flight</span>
+        <div id="checks" class="list muted">Checking…</div>
+        <div class="row"><span class="spacer"></span><button id="keysShow" class="gp-button">API keys</button><button id="checkRun" class="gp-button">Check again</button></div>
       </section>
     </div>
-    <div id="notesView" class="hidden">
-      <section>
-        <h2>GP's read on you</h2>
-        <div class="k" id="profileMeta"></div>
-        <textarea id="profile" placeholder="Builds up after your first few sessions. You can write or correct it yourself."></textarea>
-        <div class="row"><span class="spacer"></span><span class="k" id="profileSaved"></span><button id="profileSave">Save</button></div>
+    <div id="notesView" class="view hidden">
+      <section class="gp-panel">
+        <span class="gp-label">GP's read on you</span>
+        <p class="lead" id="profileMeta"></p>
+        <textarea id="profile" class="gp-input" placeholder="Builds up after your first few sessions. You can write or correct it yourself."></textarea>
+        <div class="row"><span class="spacer"></span><span class="muted" id="profileSaved"></span><button id="profileSave" class="gp-button gp-button--primary">Save</button></div>
       </section>
-      <section>
-        <h2>Notes GP remembers</h2>
-        <div id="notesList" class="muted">-</div>
+      <section class="gp-panel">
+        <span class="gp-label">Notes GP remembers</span>
+        <div id="notesList" class="list muted">-</div>
         <div class="row">
-          <select id="noteCat">
+          <select id="noteCat" class="gp-input">
             <option>driving</option><option>setup</option><option>radio</option>
             <option>strategy</option><option>personal</option><option>track</option>
           </select>
-          <input id="noteTrack" placeholder="track (track notes only)" style="width: 200px" />
+          <input id="noteTrack" class="gp-input" placeholder="Track (track notes only)" style="width: 200px" />
         </div>
-        <div class="row"><input id="noteText" placeholder="Something GP should remember" /><button id="noteAdd">Add</button></div>
+        <div class="row"><input id="noteText" class="gp-input" placeholder="Something GP should remember" /><button id="noteAdd" class="gp-button">Add</button></div>
       </section>
-      <section><h2>Recent sessions</h2><div id="sessions" class="muted">-</div></section>
+      <section class="gp-panel"><span class="gp-label">Recent sessions</span><div id="sessions" class="list muted">-</div></section>
     </div>
-    <div id="raceView">
-    <section id="session"><h2>Session</h2><div class="muted">Waiting for F1 23 telemetry on UDP 20777...</div></section>
-    <section id="player"><h2>Car</h2><div class="muted">No car data yet.</div></section>
-    <section id="laps"><h2>Laps</h2><div class="muted">No completed laps.</div></section>
-    <section id="order"><h2>Order</h2><div class="muted">-</div></section>
-    <section id="diag"><h2>Listener</h2><div class="muted">-</div></section>
+    <div id="raceView" class="view">
+      <section id="hero" class="hero"><div class="muted hero-where">Waiting for F1 23 telemetry on UDP 20777.</div></section>
+      <section id="player" class="gp-panel hidden"></section>
+      <section id="laps" class="gp-panel hidden"></section>
+      <section id="order" class="gp-panel hidden"></section>
+      <section id="session" class="gp-panel hidden"></section>
+      <div id="diag" class="footer"></div>
     </div>
     <script src="app.js"></script>
   </body>

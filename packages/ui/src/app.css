@@ -1,0 +1,199 @@
+/*
+ * App controls for the desktop windows (dashboard, Notes, Check). Added when the dashboard moved
+ * onto @gp/ui; kept to what those screens use. Calm: thin borders, no fills except surfaces,
+ * red only for live state and recording.
+ */
+
+/* Button: quiet by default. --primary is the one main action on a screen. */
+.gp-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gp-space-2);
+  height: 28px;
+  padding: 0 var(--gp-space-3);
+  font: inherit;
+  font-weight: var(--gp-font-medium);
+  color: var(--gp-color-text);
+  background: transparent;
+  border: 1px solid var(--gp-color-border);
+  border-radius: var(--gp-radius-md);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--gp-motion-fast) var(--gp-motion-ease);
+}
+.gp-button:hover:not(:disabled) {
+  border-color: var(--gp-color-text-faint);
+}
+.gp-button:disabled {
+  color: var(--gp-color-text-faint);
+  cursor: default;
+}
+.gp-button--primary {
+  background: var(--gp-color-text);
+  border-color: var(--gp-color-text);
+  color: var(--gp-color-bg);
+}
+.gp-button--primary:hover:not(:disabled) {
+  border-color: var(--gp-color-text);
+}
+.gp-button[aria-pressed="true"] {
+  border-color: var(--gp-color-text-muted);
+}
+
+/* Status dot. Red = live or recording, the only red on the dashboard. */
+.gp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--gp-color-text-faint);
+}
+.gp-dot--live {
+  background: var(--gp-color-accent);
+}
+.gp-dot--warn {
+  background: var(--gp-color-warn);
+}
+
+/* Tabs: text with a thin white underline on the current one. */
+.gp-tabs {
+  display: flex;
+  gap: var(--gp-space-5);
+  border-bottom: 1px solid var(--gp-color-border);
+}
+.gp-tab {
+  padding: var(--gp-space-2) 0 var(--gp-space-3);
+  font: inherit;
+  font-weight: var(--gp-font-medium);
+  color: var(--gp-color-text-muted);
+  background: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: pointer;
+}
+.gp-tab[aria-selected="true"] {
+  color: var(--gp-color-text);
+  border-bottom-color: var(--gp-color-text);
+}
+.gp-tab .gp-dot {
+  display: inline-block;
+  margin-left: var(--gp-space-1);
+  vertical-align: middle;
+}
+
+/* Panel: a surface with a small caps title. */
+.gp-panel {
+  padding: var(--gp-space-4) var(--gp-space-5) var(--gp-space-5);
+  background: var(--gp-color-surface);
+  border: 1px solid var(--gp-color-border);
+  border-radius: var(--gp-radius-md);
+}
+.gp-panel > .gp-label:first-child {
+  display: block;
+  margin-bottom: var(--gp-space-3);
+}
+
+/* Stat: label over value. Values use the display face with tabular figures. */
+.gp-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+  gap: var(--gp-space-4) var(--gp-space-5);
+}
+.gp-stat {
+  min-width: 0;
+}
+.gp-stat-label {
+  display: block;
+  margin-bottom: 2px;
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-size: var(--gp-type-caption-size);
+  line-height: var(--gp-type-caption-line);
+  font-weight: var(--gp-font-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gp-color-text-faint);
+}
+.gp-stat-value {
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--gp-font-numeric);
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: var(--gp-font-medium);
+}
+.gp-stat-value small {
+  display: block;
+  font-size: var(--gp-type-caption-size);
+  color: var(--gp-color-text-muted);
+  font-weight: var(--gp-font-regular);
+}
+.gp-stat--big .gp-stat-value {
+  font-size: var(--gp-type-name-size);
+  line-height: 32px;
+}
+
+/* Table: tabular figures, hairline rows, caps header. */
+.gp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--gp-font-numeric);
+}
+.gp-table th {
+  padding: 0 var(--gp-space-2) var(--gp-space-2);
+  text-align: left;
+  font-size: var(--gp-type-caption-size);
+  line-height: var(--gp-type-caption-line);
+  font-weight: var(--gp-font-medium);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gp-color-text-faint);
+  border-bottom: 1px solid var(--gp-color-border);
+}
+.gp-table td {
+  padding: 5px var(--gp-space-2);
+  border-bottom: 1px solid color-mix(in srgb, var(--gp-color-border) 55%, transparent);
+  white-space: nowrap;
+}
+.gp-table tr:last-child td {
+  border-bottom: 0;
+}
+.gp-table th:first-child,
+.gp-table td:first-child {
+  padding-left: 0;
+}
+.gp-table .num {
+  text-align: right;
+}
+
+/* Text fields. */
+.gp-input {
+  width: 100%;
+  min-height: 32px;
+  padding: 6px var(--gp-space-3);
+  font: inherit;
+  color: var(--gp-color-text);
+  background: var(--gp-color-bg);
+  border: 1px solid var(--gp-color-border);
+  border-radius: var(--gp-radius-md);
+}
+.gp-input::placeholder {
+  color: var(--gp-color-text-faint);
+}
+.gp-input:focus {
+  outline: none;
+  border-color: var(--gp-color-text-muted);
+}
+textarea.gp-input {
+  min-height: 140px;
+  resize: vertical;
+  line-height: var(--gp-type-body-line);
+}
+select.gp-input {
+  width: auto;
+}

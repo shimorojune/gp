@@ -41,6 +41,7 @@ const css = [
   tokensCss(),
   readFileSync(join(root, 'src/base.css'), 'utf8'),
   readFileSync(join(root, 'src/radio.css'), 'utf8'),
+  readFileSync(join(root, 'src/app.css'), 'utf8'),
 ].join('\n')
 writeFileSync(join(dist, 'gp-ui.css'), css)
 console.log(`@gp/ui: dist/gp-ui.css (${(css.length / 1024).toFixed(1)} KB)`)
