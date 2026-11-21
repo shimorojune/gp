@@ -19,10 +19,30 @@
   border-radius: var(--gp-radius-md);
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--gp-motion-fast) var(--gp-motion-ease);
+  transition: border-color var(--gp-motion-fast) var(--gp-motion-ease), background-color
+    var(--gp-motion-fast) var(--gp-motion-ease), transform var(--gp-motion-instant)
+    var(--gp-motion-ease);
 }
 .gp-button:hover:not(:disabled) {
   border-color: var(--gp-color-text-faint);
+  background-color: var(--gp-color-surface);
+}
+.gp-button:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.gp-button--sm {
+  height: 24px;
+  padding: 0 var(--gp-space-2);
+  font-size: 12px;
+}
+.gp-button--ghost {
+  border-color: transparent;
+  color: var(--gp-color-text-muted);
+}
+.gp-button--ghost:hover:not(:disabled) {
+  color: var(--gp-color-text);
+  border-color: transparent;
+  background-color: var(--gp-color-surface-raised);
 }
 .gp-button:disabled {
   color: var(--gp-color-text-faint);
@@ -34,7 +54,8 @@
   color: var(--gp-color-bg);
 }
 .gp-button--primary:hover:not(:disabled) {
-  border-color: var(--gp-color-text);
+  border-color: #ffffff;
+  background-color: #ffffff;
 }
 .gp-button[aria-pressed="true"] {
   border-color: var(--gp-color-text-muted);
@@ -46,13 +67,25 @@
   height: 6px;
   border-radius: 50%;
   flex: none;
-  background: var(--gp-color-text-faint);
+  color: var(--gp-color-text-faint);
+  background: currentColor;
+  transition: color var(--gp-motion-base) var(--gp-motion-ease);
+}
+.gp-dot--good {
+  color: var(--gp-color-good);
+}
+.gp-dot--bad {
+  color: var(--gp-color-bad);
+}
+/* A slow ring for live state only (on track, recording, push-to-talk open). */
+.gp-dot--pulse {
+  animation: gp-pulse 1.6s var(--gp-motion-ease) infinite;
 }
 .gp-dot--live {
-  background: var(--gp-color-accent);
+  color: var(--gp-color-accent);
 }
 .gp-dot--warn {
-  background: var(--gp-color-warn);
+  color: var(--gp-color-warn);
 }
 
 /* Tabs: text with a thin white underline on the current one. */
@@ -71,6 +104,11 @@
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
   cursor: pointer;
+  transition: color var(--gp-motion-fast) var(--gp-motion-ease), border-color var(--gp-motion-base)
+    var(--gp-motion-ease);
+}
+.gp-tab:hover {
+  color: var(--gp-color-text);
 }
 .gp-tab[aria-selected="true"] {
   color: var(--gp-color-text);
@@ -213,7 +251,7 @@ select.gp-input {
   padding-right: 30px;
   appearance: none;
   cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23a3a7b1' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23b3b3b9' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
 }

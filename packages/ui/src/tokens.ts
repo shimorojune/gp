@@ -9,20 +9,24 @@
 
 /** Raw palette. Only referenced from this file. */
 export const palette = {
+  /** Carbon: neutral greys with no blue cast (v2). */
   ink: {
-    0: '#0b0c10',
-    100: '#15161d', // card background, close to the app icon (#15171c)
-    200: '#1f2129',
-    300: '#2c2f39',
-    500: '#5d616d',
-    700: '#a3a7b1',
-    900: '#f4f5f7',
+    0: '#0e0e10',
+    100: '#17171a',
+    200: '#202024',
+    250: '#28282d',
+    300: '#2e2e33',
+    400: '#66666d',
+    500: '#8c8c94',
+    700: '#b3b3b9',
+    900: '#f5f5f6',
   },
   red: { 400: '#ff4d3d', 500: '#e10600' },
   purple: '#b77dff',
   green: '#35d07a',
+  statusGreen: '#2fcf72',
   yellow: '#f5c518',
-  amber: '#ffa233',
+  amber: '#ffa62b',
   white: '#ffffff',
 } as const
 
@@ -32,7 +36,11 @@ export const color = {
   bg: ink[0],
   surface: ink[100],
   surfaceRaised: ink[200],
+  /** Hover on raised things, the selected segment, switch track off. */
+  surfaceHover: ink[250],
   border: ink[300],
+  /** Control edges that must read at 3:1 (switch, segmented, chart baseline). */
+  borderStrong: ink[400],
   /** The thin light edge around broadcast cards. */
   edge: 'rgba(255, 255, 255, 0.16)',
   text: ink[900],
@@ -41,7 +49,7 @@ export const color = {
   accent: palette.red[500],
   accentText: palette.red[400],
   focusRing: ink[900],
-  good: palette.green,
+  good: palette.statusGreen,
   warn: palette.amber,
   bad: palette.red[400],
   // Timing, same meaning as F1 timing screens. Data only.
@@ -109,19 +117,34 @@ export const space = {
   5: '20px',
   6: '24px',
   8: '32px',
+  10: '40px',
 } as const
 
 export const radius = {
   sm: '2px',
   md: '6px',
+  lg: '12px',
 } as const
 
+/** Floating things only: menus, toasts. */
+export const shadow = {
+  pop: '0 8px 24px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)',
+} as const
+
+/** One calm language: enter = ease, exit = ease-in, no overshoot. docs/DESIGN.md, Motion. */
 export const motion = {
+  instant: '80ms',
   fast: '140ms',
   base: '200ms',
+  slow: '320ms',
+  page: '280ms',
   fadeOut: '600ms',
+  stagger: '40ms',
+  rise: '8px',
   ease: 'cubic-bezier(0.2, 0, 0, 1)',
+  easeIn: 'cubic-bezier(0.4, 0, 1, 1)',
+  easeInout: 'cubic-bezier(0.4, 0, 0.2, 1)',
 } as const
 
-export const tokens = { color, team: teamColors, font, type, space, radius, motion }
+export const tokens = { color, team: teamColors, font, type, space, radius, shadow, motion }
 export type Tokens = typeof tokens

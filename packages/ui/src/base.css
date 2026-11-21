@@ -40,6 +40,9 @@
 
 @media (prefers-reduced-motion: reduce) {
   .gp-app *,
+  .gp-app *::before,
+  .gp-app *::after,
+  .gp-radio,
   .gp-radio * {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;

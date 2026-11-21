@@ -4,15 +4,20 @@ Source: `packages/ui` (`@gp/ui`). Living style guide: `pnpm --filter @gp/ui styl
 `packages/ui/dist/styleguide/index.html` and opens it (macOS). Screenshots: `pnpm --filter @gp/ui screenshot`
 (needs Playwright).
 
-Status (2026-11-21): applied to the desktop app (overlay radio card, chat panel, dashboard,
-Notes, Check). It holds the foundations (colour, type, space, radius, motion), the radio card,
-and the small app controls those screens needed. Anything else is added when a real screen
-needs it, not up front.
+Status (2026-11-21, v2): the debrief app. Carbon palette with no blue cast, a motion language,
+and the components the new screens use (app shell, status checks, splash, session list, chat,
+settings controls). Designs: the GP screens canvas (https://claude.ai/artifact/52YARWsg6T2tRfBVrRBer4)
+and the GP design system artifact (https://claude.ai/artifact/G2sCJmEf4LBnCHj3JAXioW); v2 of the
+artifact leads, this package follows it. Anything else is added when a real screen needs it.
 
 ## Direction
 
-- **Pit wall base.** Near-black surfaces close to the app icon (`#15171c`), white text, one red
-  (`#e10600`).
+- **F1 colours, calm.** Carbon black surfaces with no blue cast (`#0e0e10` window, `#17171a`
+  panels), white text, one F1 red (`#e10600`). Nothing vibe-coded: no blue accents, no gradients
+  on controls, no glow.
+- **Red is a line or a dot.** The current nav mark, a live dot, the splash progress hairline, the
+  mark's centre bar. Never a filled button, banner or slab.
+- **Team colour is data.** A 3px tick beside a session or car, chart values, the radio card.
 - **Broadcast look, calm.** The display face and the radio card follow the F1 TV team-radio
   cards. No italics, no red slabs, no slanted shapes (Rohit called those "arcadey").
 - **No borrowed marks.** GP draws its own shapes. No F1, FIA, team or sponsor logos, and the
@@ -26,13 +31,19 @@ TS is the source of truth; the build emits CSS custom properties `--gp-<group>-<
 
 | Group | What's in it |
 | --- | --- |
-| `color` | `bg`, `surface`, `surface-raised`, `border`, `edge`, `text`, `text-muted`, `text-faint`, `accent` (red), `accent-text`, `focus-ring`, `good`/`warn`/`bad`, `timing-overall`/`-personal`/`-slower` |
+| `color` | `bg`, `surface`, `surface-raised`, `surface-hover`, `border`, `border-strong` (control edges at 3:1), `edge`, `text`, `text-muted`, `text-faint`, `accent` (red), `accent-text`, `focus-ring`, `good`/`warn`/`bad`, `timing-overall`/`-personal`/`-slower` |
 | `team` | Team colours keyed by F1 23 team id (`--gp-team-0` … `--gp-team-9`). `teamColor(id)` falls back to GP red |
 | `font` | `display` (GP Display), `sans` (Inter), `mono`, `stretch` 125%, weights 400/500/600/800 |
 | `type` | `caption` 11/14, `body` 13/20, `title` 18/24, `quote` 17/19, `name` 28/26, `number` 60/52 |
-| `space` | 4px grid: 1=4 … 8=32 |
-| `radius` | `sm` 2px (broadcast cards), `md` 6px (app controls) |
-| `motion` | `fast` 140ms, `base` 200ms, `fade-out` 600ms, one ease curve |
+| `space` | 4px grid: 1=4 … 10=40 |
+| `radius` | `sm` 2px (broadcast cards), `md` 6px (app controls), `lg` 12px (chat bubbles) |
+| `shadow` | `pop`: floating things only (menus, toasts) |
+| `motion` | `instant` 80ms (press), `fast` 140ms (hover), `base` 200ms (state), `page` 280ms (page enter), `slow` 320ms (charts, radio card), `fade-out` 600ms, `stagger` 40ms per list item, `rise` 8px; `ease` for enter, `ease-in` for leave, `ease-inout` for loops |
+
+Motion rules: every change moves and every move is calm. Pages rise in (`.gp-page`), lists and
+check rows stagger (`.gp-enter` with `--i`), status changes recolour in place (a check goes
+pending ring, spinning arc, filled with a glyph), presses scale to 0.97. No overshoot or bounce;
+only live state loops (live dot, mic level, typing). `prefers-reduced-motion` cuts all of it.
 
 Colour rules:
 - Red marks the primary action, live state and push-to-talk. Never a filled block on the overlay.
@@ -100,6 +111,16 @@ Added when the dashboard moved over; CSS classes only, no builders.
 
 `gpMark({ size, tile, label })` (`src/mark.ts`) draws the app icon's six bars (tallest one red)
 as SVG; the header lockup is the bare mark at 18px next to "GP".
+
+## v2 components (`src/components.css`)
+
+CSS classes; markup is built in the renderer. Motion primitives (`.gp-enter`, `.gp-fade-in`,
+`.gp-pop`, `.gp-page`), `.gp-spinner`, `.gp-kbd`, app shell (`.gp-shell`, `.gp-nav`,
+`.gp-nav-item[aria-current]`, `.gp-topbar`, `.gp-statusline`, `.gp-content`), `.gp-banner`,
+`.gp-chip`, `.gp-team-tick`, `.gp-seg`, `.gp-switch`, `.gp-setting`, session list (`.gp-list-*`),
+lap chart, sector bar, bar meter, mic level (`.gp-level`, `[data-real]` driven by `--h`),
+status checks (`.gp-checks`, `.gp-check[data-state]`), chat (`.gp-msg-*`, `.gp-typing`),
+`.gp-empty`, `.gp-skel`, `.gp-splash`, `.gp-steps`.
 
 ## In the desktop app
 

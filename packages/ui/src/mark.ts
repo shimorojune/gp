@@ -24,7 +24,7 @@ export interface MarkOptions {
 export function gpMark({ size = 20, tile = false, label = 'GP' }: MarkOptions = {}): string {
   const bars = BARS.map(
     ([x, y, h], i) =>
-      `<rect x="${x}" y="${y}" width="62" height="${h}" rx="31" fill="${i === 2 ? 'var(--gp-color-accent, #e10600)' : 'currentColor'}"/>`,
+      `<rect class="bar" style="--i:${i}" x="${x}" y="${y}" width="62" height="${h}" rx="31" fill="${i === 2 ? 'var(--gp-color-accent, #e10600)' : 'currentColor'}"/>`,
   ).join('')
   const view = tile ? '100 100 824 824' : '220 260 584 504'
   const bg = tile
