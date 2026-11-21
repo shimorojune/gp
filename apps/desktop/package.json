@@ -1,7 +1,7 @@
 {
   "name": "@gp/desktop",
   "productName": "GP",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "GP, a personal AI race engineer for F1 23",
   "private": true,
   "type": "module",

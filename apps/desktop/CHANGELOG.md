@@ -1,5 +1,11 @@
 # GP changelog
 
+## [0.4.2](https://github.com/shimorojune/gp/compare/v0.4.1...v0.4.2) (2026-11-21)
+
+### Bug Fixes
+
+* **voice:** use ElevenLabs and Deepgram keys fetched after start-up ([72d36cb](https://github.com/shimorojune/gp/commit/72d36cbd3a5e812227ffa990c484b3ced5f70cfc))
+
 ## [0.4.1](https://github.com/shimorojune/gp/compare/v0.4.0...v0.4.1) (2026-11-21)
 
 ### Bug Fixes
