@@ -1,5 +1,11 @@
 # GP changelog
 
+## [0.4.1](https://github.com/shimorojune/gp/compare/v0.4.0...v0.4.1) (2026-11-21)
+
+### Bug Fixes
+
+* **desktop:** take secrets from Infisical only, no fallbacks ([2878f62](https://github.com/shimorojune/gp/commit/2878f62e8ad311fecac83d2c2b458cd19a83d079))
+
 ## [0.4.0](https://github.com/shimorojune/gp/compare/v0.3.0...v0.4.0) (2026-11-21)
 
 ### Features
