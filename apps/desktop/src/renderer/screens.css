@@ -680,3 +680,13 @@ textarea.gp-input {
 .hero > .is-wide {
   grid-column: span 2;
 }
+.debrief-wrap {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.debrief-wrap > .debrief {
+  flex: 1;
+  height: auto;
+}

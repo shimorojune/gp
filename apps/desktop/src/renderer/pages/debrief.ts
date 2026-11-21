@@ -504,8 +504,11 @@ function debriefPanel(d: SessionDetail, writing: boolean): string {
 
 // ------------------------------------------------------------------ page
 
+/** Seasons the driver said "Later" to, for this run of the app. */
+const laterSeasons = new Set<number>()
+
 export function debriefPage(root: HTMLElement): () => void {
-  root.innerHTML = `<div class="debrief gp-page">
+  root.innerHTML = `<div class="debrief-wrap"><div data-season></div><div class="debrief gp-page">
 <aside class="lib" aria-label="Library">
 <div class="lib-head">
 <div class="gp-seg" role="group" aria-label="Program">${PROGRAMS.map(([p, l]) => `<button data-prog="${p}" aria-pressed="false">${l}</button>`).join('')}</div>
@@ -515,7 +518,7 @@ export function debriefPage(root: HTMLElement): () => void {
 <div class="lib-body" data-lib><div class="lib-skel"><span class="gp-skel" style="width: 50%"></span><span class="gp-skel" style="width: 90%; height: 28px"></span><span class="gp-skel" style="width: 90%; height: 28px"></span><span class="gp-skel" style="width: 90%; height: 28px"></span><span class="gp-skel" style="width: 40%"></span><span class="gp-skel" style="width: 90%; height: 28px"></span></div></div>
 </aside>
 <div class="detail" data-detail><div class="page writing"><span class="gp-skel" style="width: 30%; height: 14px"></span><span class="gp-skel" style="width: 60%; height: 26px"></span><span class="gp-skel" style="width: 100%; height: 72px"></span><span class="gp-skel" style="width: 100%; height: 140px"></span></div></div>
-</div>`
+</div></div>`
   const lib = $('[data-lib]', root)
   const detail = $('[data-detail]', root)
   const q = $<HTMLInputElement>('[data-q]', root)
@@ -983,6 +986,23 @@ ${raceText ? `<section class="gp-panel gp-enter" style="--i: 2">${gpHead('GP aft
     if (row && (e.key === 'Enter' || e.key === ' ')) {
       e.preventDefault()
       row.click()
+      return
+    }
+    if (e.key === 'Escape' && menuOpen) {
+      menuOpen = false
+      return void renderDetail(true)
+    }
+    // Up and down walk the library, like a mail list.
+    const item = (e.target as HTMLElement).closest<HTMLElement>('[data-sel]')
+    if (item && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      e.preventDefault()
+      const all = [...lib.querySelectorAll<HTMLElement>('[data-sel]')]
+      const next = all[all.indexOf(item) + (e.key === 'ArrowDown' ? 1 : -1)]
+      if (next) {
+        next.focus()
+        next.click()
+        next.scrollIntoView({ block: 'nearest' })
+      }
     }
   })
   q.addEventListener('input', () => {
@@ -1009,7 +1029,82 @@ ${raceText ? `<section class="gp-panel gp-enter" style="--i: 2">${gpHead('GP aft
       else void renderDetail()
     }
   })
-  const timer = setInterval(() => void refresh(), 20_000)
+  const timer = setInterval(() => {
+    void refresh()
+    void seasonPrompt()
+  }, 20_000)
+
+  // A career season GP couldn't place: ask once per season, in words, with the likely answer first.
+  const seasonEl = $('[data-season]', root)
+  let filedNote = ''
+  const seasonPrompt = async () => {
+    const c = await gp()
+      .careers()
+      .catch(() => null)
+    if (!alive || !c) return
+    careers = c
+    const s = c.unassigned.find((u) => !laterSeasons.has(u.seasonLink))
+    if (!s) {
+      setHtml(
+        seasonEl,
+        filedNote
+          ? `<div class="banners" style="padding-bottom: 0"><div class="gp-banner"><span class="gp-dot gp-dot--good"></span><span class="gp-banner-text">${esc(filedNote)}</span><button class="gp-button gp-button--sm gp-button--ghost" data-season-dismiss>Dismiss</button></div></div>`
+          : '',
+      )
+      return
+    }
+    const latest = [...c.careers].sort(
+      (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+    )[0]
+    const where = [s.tracks[0], s.team].filter(Boolean).join(', ')
+    const next = latest ? latest.seasons.length + 1 : 1
+    setHtml(
+      seasonEl,
+      `<div class="banners" style="padding-bottom: 0"><div class="gp-banner"><span class="gp-dot gp-dot--warn"></span><span class="gp-banner-text"><b>New career season${where ? ` (${esc(where)})` : ''}.</b> ${
+        latest
+          ? `Season ${next} of ${esc(latest.name)}, or a new career?`
+          : 'File it as your first career?'
+      } Your driver profile carries over either way.</span>${
+        latest
+          ? `<button class="gp-button gp-button--sm gp-button--primary" data-season-to="${esc(latest.id)}" data-season-link="${s.seasonLink}" data-season-label="${esc(`Filed as ${latest.name}, season ${next}.`)}">Season ${next} of ${esc(latest.name)}</button>`
+          : ''
+      }<button class="gp-button gp-button--sm${latest ? '' : ' gp-button--primary'}" data-season-new="${esc(`Career ${c.careers.length + 1}`)}" data-season-link="${s.seasonLink}">New career</button><button class="gp-button gp-button--sm gp-button--ghost" data-season-later="${s.seasonLink}">Later</button></div></div>`,
+    )
+  }
+  seasonEl.addEventListener('click', async (e) => {
+    const t = e.target as HTMLElement
+    const later = t.closest<HTMLElement>('[data-season-later]')
+    if (later) {
+      laterSeasons.add(Number(later.dataset.seasonLater))
+      return void seasonPrompt()
+    }
+    if (t.closest('[data-season-dismiss]')) {
+      filedNote = ''
+      return void seasonPrompt()
+    }
+    const b = t.closest<HTMLButtonElement>('[data-season-to],[data-season-new]')
+    if (!b) return
+    b.disabled = true
+    const name = b.dataset.seasonNew
+    const r = await gp().assignSeason(
+      Number(b.dataset.seasonLink),
+      name ? { newCareer: name } : { careerId: b.dataset.seasonTo! },
+    )
+    if ('error' in r) {
+      b.disabled = false
+      filedNote = r.error
+    } else {
+      careers = r
+      filedNote = name
+        ? `Filed as ${name}, season 1. Your driver profile carries over.`
+        : (b.dataset.seasonLabel ?? 'Filed.')
+      await load('career')
+      renderLib()
+      void renderDetail(true)
+    }
+    void seasonPrompt()
+  })
+  void seasonPrompt()
 
   void (async () => {
     await load('career')

@@ -119,8 +119,16 @@ ${NAV.map(([id, label, ic]) => `<button class="gp-nav-item" data-page="${id}">${
 
 /** Quits, installs and reopens; says why when it can't (for example while you're driving). */
 export async function install(): Promise<void> {
+  // Cover the window while the app quits and the new version opens.
+  const layer = document.createElement('div')
+  layer.className = 'layer restarting gp-fade-in'
+  layer.style.background = 'var(--gp-color-bg)'
+  layer.style.zIndex = '50'
+  layer.innerHTML = `<span class="gp-spinner"></span><span class="muted">Restarting GP to install ${esc(get().update?.version ?? 'the update')}…</span>`
+  document.querySelector('.app-root')?.append(layer)
   const why = await gp().installUpdate()
   if (why) {
+    layer.remove()
     const u = get().update
     if (u) window.dispatchEvent(new CustomEvent('gp:update-refused', { detail: why }))
   }
