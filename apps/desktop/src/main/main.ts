@@ -69,7 +69,7 @@ import {
   type StatusInfo,
   type UpdateState,
 } from '../ipc.ts'
-import { preflight, saveKeys } from './preflight.ts'
+import { preflight } from './preflight.ts'
 import { RadioCardWindow } from './radio-card.ts'
 import { SecretStore } from './secrets.ts'
 import {
@@ -131,9 +131,10 @@ function claudeExecutable(): string | undefined {
 }
 const CLAUDE_BIN = claudeExecutable()
 const sdk = CLAUDE_BIN ? { pathToClaudeCodeExecutable: CLAUDE_BIN } : {}
-// API keys (Deepgram, ElevenLabs) live in ~/Documents/GP/.env, nowhere else.
+// ~/Documents/GP/.env is only for GP_* settings (GP_MIC, GP_MODEL...). Secrets come from
+// Infisical and nowhere else: SecretStore removes any key the shell or .env put in the
+// environment, then fetches in whenReady, before voice and Claude start.
 const envFile = loadDotEnv(GP_HOME)
-// Then Infisical (settings pane), which wins: fetched in whenReady, before voice and Claude start.
 const secrets = new SecretStore(GP_HOME, {
   available: () => safeStorage.isEncryptionAvailable(),
   encrypt: (text) => safeStorage.encryptString(text),
@@ -171,7 +172,13 @@ const notes = new NotesStore(join(GP_HOME, 'notes.json'))
 const engineerCwd = join(GP_HOME, 'engineer')
 mkdirSync(engineerCwd, { recursive: true })
 const pitPlan = new PitPlan()
+/** Claude runs on the setup token from Infisical or not at all. */
+const claudeBlocked = () =>
+  process.env.CLAUDE_CODE_OAUTH_TOKEN
+    ? null
+    : 'CLAUDE_CODE_OAUTH_TOKEN is missing from Infisical, so the engineer is off'
 const engineer = new EngineerSession({
+  blocked: claudeBlocked,
   pitPlan,
   radioPrefs: () => settings.get().radio,
   snapshot: () => state.snapshot(),
@@ -304,7 +311,7 @@ function queueHistory(job: () => Promise<void>): void {
   historyQueue = historyQueue.then(job).catch((e) => console.error('[history]', e))
 }
 
-/** Postgres sync, once DATABASE_URL is known (from Infisical or .env). */
+/** Postgres sync, once DATABASE_URL has come from Infisical. */
 let sync: HistorySync | null = null
 const emptySync = {
   lastSyncAt: null,
@@ -344,6 +351,12 @@ function afterIngest(): void {
 
 /** Summary for the records and an updated driver profile, by the cheap model. */
 async function debrief(ids: number[]): Promise<void> {
+  const why = claudeBlocked()
+  if (why) {
+    // Left undebriefed: the next start with the token picks them up.
+    if (ids.length) console.log(`[history] ${ids.length} debrief(s) waiting: ${why}`)
+    return
+  }
   for (const id of ids) {
     try {
       const d = await debriefSession(history, id, { cwd: engineerCwd, sdk })
@@ -524,9 +537,11 @@ app.whenReady().then(async () => {
   else console.log(`[chat] ${CHAT_HOTKEY} toggles the GP radio overlay`)
   if (globalShortcut.register(TALK_HOTKEY, () => voice.toggleTalk()))
     console.log(`[voice] ${TALK_HOTKEY} = push-to-talk fallback (press, talk, press again)`)
-  console.log(
-    `[env] ${envFile ?? `no ${join(GP_HOME, '.env')} (no API keys: whisper + Mac voice)`}`,
-  )
+  console.log(`[env] ${envFile ? `GP_* settings from ${envFile}` : `no ${join(GP_HOME, '.env')}`}`)
+  if (secrets.ignored.length)
+    console.log(
+      `[secrets] ignored ${secrets.ignored.join(', ')} from the shell or .env: secrets only come from Infisical`,
+    )
 
   // Notes tab: GP's profile of him, his notes, recent sessions. Edits reach GP as [context].
   const notesData = (): NotesData => ({
@@ -696,14 +711,7 @@ app.whenReady().then(async () => {
       voice: { stt: v.stt, sttFallbackReady: v.sttFallbackReady, tts: v.tts, speaking: v.speaking },
       micLevel: v.micLevel,
       outputDevice: outputDevice.value,
-      claude: {
-        ...claudeStat,
-        auth: process.env.CLAUDE_CODE_OAUTH_TOKEN
-          ? 'setup token'
-          : process.env.ANTHROPIC_API_KEY
-            ? 'api key'
-            : 'claude code login',
-      },
+      claude: { ...claudeStat, auth: claudeBlocked() ? 'none' : 'setup token' },
       elevenLabs: elevenCredits.value,
       secrets: secrets.status(),
       database: { configured: !!sync, ...(sync?.localStatus() ?? emptySync) },
@@ -795,17 +803,8 @@ function startPreflight(): void {
       secrets: () => secrets.status(),
       database: async () => (sync ? sync.check() : null),
     }),
-    firstRun: !existsSync(join(GP_HOME, '.env')),
+    firstRun: !secrets.status().configured,
   }))
-  ipcMain.handle(IPC.saveKeys, (_e, keys) => {
-    try {
-      const file = saveKeys(GP_HOME, keys)
-      console.log(`[setup] API keys saved to ${file}`)
-      return { file }
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : String(e) }
-    }
-  })
   // The voice pipeline reads the keys at startup.
   ipcMain.on(IPC.relaunch, () => {
     app.relaunch()

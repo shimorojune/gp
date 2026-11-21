@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { NotesStore } from '../src/notes.ts'
 import { buildSystemPrompt } from '../src/persona.ts'
 import { isSilent } from '../src/radio.ts'
-import { statusTag } from '../src/session.ts'
+import { EngineerSession, statusTag } from '../src/session.ts'
 import { paceTargetsView, raceSnapshotView } from '../src/views.ts'
 
 function car(over: Partial<CarSnapshot>): CarSnapshot {
@@ -237,5 +237,24 @@ describe('practice and qualifying', () => {
     expect(statusTag(practice())).toBe(
       '[live · Brazil P1 · PRACTICE, not a race · lap 5 · P7 on times]',
     )
+  })
+})
+
+describe('EngineerSession without the Claude token', () => {
+  it('refuses to ask and never starts a Claude process while blocked', async () => {
+    const why = 'CLAUDE_CODE_OAUTH_TOKEN is missing from Infisical'
+    const root = mkdtempSync(join(tmpdir(), 'gp-eng-'))
+    const e = new EngineerSession({
+      blocked: () => why,
+      snapshot: () => snapshot(),
+      notes: new NotesStore(join(root, 'notes.json')),
+      // A Claude process that must never be reached.
+      sdk: { pathToClaudeCodeExecutable: join(root, 'no-such-claude') },
+    })
+    e.start()
+    await expect(e.ask('box this lap?')).rejects.toThrow('missing from Infisical')
+    await expect(e.notify('lap done')).rejects.toThrow('missing from Infisical')
+    expect(e.busy).toBe(false)
+    await e.close()
   })
 })

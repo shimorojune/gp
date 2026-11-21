@@ -18,7 +18,6 @@ export function connectionLine(s: SecretsStatusInfo | null): { dot: string; text
   if (!s || !s.configured) return { dot: 'gp-dot', text: 'Not configured' }
   const at = s.fetchedAt ? ` · last fetched ${when(s.fetchedAt)}` : ''
   if (s.source === 'infisical') return { dot: 'gp-dot gp-dot--good', text: `Connected${at}` }
-  if (s.source === 'cache') return { dot: 'gp-dot gp-dot--warn', text: `Using cached secrets${at}` }
   return { dot: 'gp-dot gp-dot--bad', text: `Error · ${s.error ?? 'could not fetch secrets'}` }
 }
 

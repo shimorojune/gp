@@ -1,8 +1,14 @@
-import { mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { type SecretCrypto, SecretStore, applySecrets, fetchInfisical } from './secrets.ts'
+import {
+  type SecretCrypto,
+  SecretStore,
+  applySecrets,
+  fetchInfisical,
+  scrubSecrets,
+} from './secrets.ts'
 
 const crypto: SecretCrypto = {
   available: () => true,
@@ -22,7 +28,7 @@ const cfg = {
 type Call = { url: string; init?: RequestInit }
 function fakeInfisical(
   secrets: Record<string, string>,
-  opts: { down?: boolean; badLogin?: boolean } = {},
+  opts: { down?: boolean; badLogin?: boolean; noImports?: boolean } = {},
 ) {
   const calls: Call[] = []
   const f = (async (url: string, init?: RequestInit) => {
@@ -40,7 +46,9 @@ function fakeInfisical(
           secretKey,
           secretValue,
         })),
-        imports: [{ secrets: [{ secretKey: 'DEEPGRAM_API_KEY', secretValue: 'from-import' }] }],
+        imports: opts.noImports
+          ? []
+          : [{ secrets: [{ secretKey: 'DEEPGRAM_API_KEY', secretValue: 'from-import' }] }],
       })
     }
     return new Response('not found', { status: 404 })
@@ -92,6 +100,14 @@ describe('applySecrets', () => {
   })
 })
 
+describe('scrubSecrets', () => {
+  it('removes every credential name and nothing else', () => {
+    const env: NodeJS.ProcessEnv = { DEEPGRAM_API_KEY: 'k', ANTHROPIC_API_KEY: 'a', GP_MODEL: 'x' }
+    expect(scrubSecrets(env).sort()).toEqual(['ANTHROPIC_API_KEY', 'DEEPGRAM_API_KEY'])
+    expect(env).toEqual({ GP_MODEL: 'x' })
+  })
+})
+
 describe('SecretStore', () => {
   const dir = () => mkdtempSync(join(tmpdir(), 'gp-secrets-'))
 
@@ -114,7 +130,72 @@ describe('SecretStore', () => {
     })
   })
 
-  it('applies fetched secrets, then falls back to the encrypted cache when Infisical is down', async () => {
+  /** What the shell and ~/Documents/GP/.env could have put in the environment. */
+  const strayEnv = (): NodeJS.ProcessEnv => ({
+    DATABASE_URL: 'postgres://from-dotenv',
+    CLAUDE_CODE_OAUTH_TOKEN: 'from-shell',
+    ELEVENLABS_API_KEY: 'from-dotenv',
+    DEEPGRAM_API_KEY: 'from-dotenv',
+    ANTHROPIC_API_KEY: 'from-shell',
+    GP_MIC: 'Some mic',
+    PATH: '/usr/bin',
+  })
+  const SECRETS = [
+    'DATABASE_URL',
+    'CLAUDE_CODE_OAUTH_TOKEN',
+    'ELEVENLABS_API_KEY',
+    'DEEPGRAM_API_KEY',
+    'ANTHROPIC_API_KEY',
+  ]
+  const allMissing = {
+    DATABASE_URL: false,
+    CLAUDE_CODE_OAUTH_TOKEN: false,
+    ELEVENLABS_API_KEY: false,
+    DEEPGRAM_API_KEY: false,
+  }
+
+  it('throws away keys from the shell or .env the moment it is built, keeping only their names', () => {
+    const env = strayEnv()
+    const s = new SecretStore(dir(), crypto, fakeInfisical({}).f, env)
+    for (const k of SECRETS) expect(env[k]).toBeUndefined()
+    expect(env.GP_MIC).toBe('Some mic')
+    expect(env.PATH).toBe('/usr/bin')
+    expect([...s.ignored].sort()).toEqual([...SECRETS].sort())
+    expect(s.status().found).toEqual(allMissing)
+    expect(JSON.stringify(s.status())).not.toContain('from-')
+  })
+
+  it('reports every secret missing when the Infisical environment is empty, whatever the Mac holds', async () => {
+    const env = strayEnv()
+    const s = new SecretStore(dir(), crypto, fakeInfisical({}, { noImports: true }).f, env)
+    s.saveConfig(cfg)
+    // A key that turns up in the environment later (some other code, a test override) counts
+    // for nothing either: only a fetch from Infisical makes a secret found.
+    env.DEEPGRAM_API_KEY = 'sneaked-in'
+    const st = await s.refresh()
+    expect(st.source).toBe('infisical')
+    expect(st.error).toBeNull()
+    expect(st.found).toEqual(allMissing)
+    for (const k of SECRETS) expect(env[k]).toBeUndefined()
+  })
+
+  it('finds exactly what Infisical returned, and applies it', async () => {
+    const env = strayEnv()
+    const s = new SecretStore(
+      dir(),
+      crypto,
+      fakeInfisical({ CLAUDE_CODE_OAUTH_TOKEN: 'token-123' }, { noImports: true }).f,
+      env,
+    )
+    s.saveConfig(cfg)
+    const st = await s.refresh()
+    expect(st.found).toEqual({ ...allMissing, CLAUDE_CODE_OAUTH_TOKEN: true })
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-123')
+    expect(env.DEEPGRAM_API_KEY).toBeUndefined()
+    expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+  })
+
+  it('has no secrets when Infisical is down: nothing cached, nothing left in the environment', async () => {
     const d = dir()
     const env: NodeJS.ProcessEnv = {}
     const up = new SecretStore(
@@ -126,19 +207,63 @@ describe('SecretStore', () => {
     up.saveConfig(cfg)
     const ok = await up.refresh()
     expect(ok.source).toBe('infisical')
-    expect(ok.found.CLAUDE_CODE_OAUTH_TOKEN).toBe(true)
-    expect(ok.found.DATABASE_URL).toBe(false)
     expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-123')
-    for (const file of readdirSync(d))
-      expect(readFileSync(join(d, file), 'utf8')).not.toContain('token-123')
+    // Only the connection is on disk, and no file holds a fetched value.
+    expect(readdirSync(d)).toEqual(['infisical.enc'])
+    for (const file of readdirSync(d)) {
+      const raw = readFileSync(join(d, file))
+      expect(raw.toString('utf8')).not.toContain('token-123')
+      expect(crypto.decrypt(raw)).not.toContain('token-123')
+    }
 
-    const env2: NodeJS.ProcessEnv = {}
-    const down = new SecretStore(d, crypto, fakeInfisical({}, { down: true }).f, env2)
+    // The same running app loses Infisical: the secrets it had are dropped.
+    const down = new SecretStore(d, crypto, fakeInfisical({}, { down: true }).f, env)
     const st = await down.refresh()
-    expect(st.source).toBe('cache')
+    expect(st.source).toBe('none')
     expect(st.error).toContain("Can't reach")
-    expect(st.fetchedAt).toBe(ok.fetchedAt)
-    expect(env2.CLAUDE_CODE_OAUTH_TOKEN).toBe('token-123')
+    expect(st.fetchedAt).toBeNull()
+    expect(st.found).toEqual(allMissing)
+    expect(env.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined()
+    expect(env.DEEPGRAM_API_KEY).toBeUndefined()
+  })
+
+  it('drops a secret that was removed from Infisical on the next fetch', async () => {
+    const env: NodeJS.ProcessEnv = {}
+    const d = dir()
+    const a = new SecretStore(
+      d,
+      crypto,
+      fakeInfisical({ ELEVENLABS_API_KEY: 'el' }, { noImports: true }).f,
+      env,
+    )
+    a.saveConfig(cfg)
+    expect((await a.refresh()).found.ELEVENLABS_API_KEY).toBe(true)
+    const b = new SecretStore(d, crypto, fakeInfisical({}, { noImports: true }).f, env)
+    expect((await b.refresh()).found.ELEVENLABS_API_KEY).toBe(false)
+    expect(env.ELEVENLABS_API_KEY).toBeUndefined()
+  })
+
+  it('deletes the secrets cache an earlier version left on disk', () => {
+    const d = dir()
+    const old = join(d, 'secrets-cache.enc')
+    writeFileSync(old, crypto.encrypt(JSON.stringify({ values: { DEEPGRAM_API_KEY: 'old' } })))
+    const env: NodeJS.ProcessEnv = {}
+    const s = new SecretStore(d, crypto, fakeInfisical({}).f, env)
+    expect(existsSync(old)).toBe(false)
+    expect(s.status().found).toEqual(allMissing)
+    expect(env.DEEPGRAM_API_KEY).toBeUndefined()
+  })
+
+  it('forgets the secrets in use when the connection is cleared', async () => {
+    const env: NodeJS.ProcessEnv = {}
+    const s = new SecretStore(dir(), crypto, fakeInfisical({ DATABASE_URL: 'postgres://x' }).f, env)
+    s.saveConfig(cfg)
+    await s.refresh()
+    expect(env.DATABASE_URL).toBe('postgres://x')
+    s.clear()
+    expect(env.DATABASE_URL).toBeUndefined()
+    expect(env.DEEPGRAM_API_KEY).toBeUndefined()
+    expect(s.status().found).toEqual(allMissing)
   })
 
   it('keeps the saved client secret when the pane sends an empty one, and tests without saving', async () => {

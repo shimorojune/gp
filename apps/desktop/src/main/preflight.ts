@@ -1,9 +1,8 @@
 import { execFile } from 'node:child_process'
-import { constants, accessSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
+import { constants, accessSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { defaultWhisperModel, dualSenseConnected } from '@gp/voice'
-import type { PreflightCheck, SecretsStatusInfo, SetupKeys } from '../ipc.ts'
+import type { PreflightCheck, SecretsStatusInfo } from '../ipc.ts'
 
 /**
  * Pre-flight: everything GP needs before a session, each with what to do about it. Shown in the
@@ -15,7 +14,7 @@ export interface PreflightDeps {
   telemetryAgeMs: () => number | null
   port: number
   micAccess: () => string
-  /** Infisical connection and which expected secrets are in the environment. */
+  /** Infisical connection and which expected secrets it returned. */
   secrets?: () => SecretsStatusInfo
   /** Postgres: null when DATABASE_URL isn't set. */
   database?: () => Promise<{
@@ -58,20 +57,12 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
     add({
       id: 'infisical',
       label: 'Infisical',
-      status: !sec.configured
-        ? 'warn'
-        : sec.source === 'infisical'
-          ? 'ok'
-          : sec.source === 'cache'
-            ? 'warn'
-            : 'fail',
+      status: !sec.configured ? 'warn' : sec.source === 'infisical' ? 'ok' : 'fail',
       detail: !sec.configured
         ? 'Not set up yet. GP needs it for every key. Settings → Connections.'
         : sec.source === 'infisical'
           ? `Connected to ${sec.config?.siteUrl ?? 'Infisical'} (${sec.config?.environment}${sec.config?.secretPath})${ago}`
-          : sec.source === 'cache'
-            ? `Using the secrets cached on this Mac${ago}. ${sec.error ?? ''}`.trim()
-            : `${sec.error ?? 'Could not fetch secrets'}. No cached secrets on this Mac.`,
+          : `${sec.error ?? 'Could not fetch secrets'}. GP has no secrets until Infisical answers.`,
     })
     const missing = Object.entries(sec.found)
       .filter(([, v]) => !v)
@@ -80,7 +71,10 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
       id: 'secrets',
       label: 'Secrets',
       status: missing.length === 0 ? 'ok' : 'warn',
-      detail: missing.length === 0 ? 'All four found' : `Missing ${missing.join(', ')}`,
+      detail:
+        missing.length === 0
+          ? 'All four found in Infisical'
+          : `Missing from Infisical: ${missing.join(', ')}`,
     })
   }
 
@@ -112,7 +106,7 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
     }
   }
 
-  const envFile = join(d.home, '.env')
+  // The environment only ever holds what Infisical returned (main/secrets.ts).
   const dg = !!process.env.DEEPGRAM_API_KEY
   const el = !!process.env.ELEVENLABS_API_KEY
   add({
@@ -121,23 +115,18 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
     status: dg && el ? 'ok' : 'warn',
     detail:
       dg && el
-        ? `Deepgram and ElevenLabs keys loaded${sec?.source === 'infisical' || sec?.source === 'cache' ? ' from Infisical' : ` from ${envFile}`}`
-        : `${[!dg && 'Deepgram (speech to text, falls back to local whisper)', !el && 'ElevenLabs (GP’s voice, falls back to the Mac voice)'].filter(Boolean).join(' and ')} missing. Add them to Infisical.`,
+        ? 'Deepgram and ElevenLabs keys loaded from Infisical'
+        : `${[!dg && 'DEEPGRAM_API_KEY (GP hears you with local whisper instead)', !el && 'ELEVENLABS_API_KEY (GP speaks with the Mac voice instead)'].filter(Boolean).join(' and ')} missing from Infisical.`,
   })
 
-  // Claude Code login: the keychain item (no secret is read) or the credentials file.
-  const keychain = await run('security', ['find-generic-password', '-s', 'Claude Code-credentials'])
-  const file = existsSync(join(homedir(), '.claude', '.credentials.json'))
-  const apiKey = !!process.env.ANTHROPIC_API_KEY
   const token = !!process.env.CLAUDE_CODE_OAUTH_TOKEN
   add({
     id: 'claude',
     label: 'Claude login',
-    status: keychain || file || apiKey || token ? 'ok' : 'fail',
-    detail:
-      keychain || file || apiKey || token
-        ? `Using ${token ? 'your Claude setup token (Max plan)' : apiKey ? 'ANTHROPIC_API_KEY (billed per call)' : 'your Claude Code login'}`
-        : 'No Claude Code login found. Install Claude Code and run `claude` once in Terminal to sign in.',
+    status: token ? 'ok' : 'fail',
+    detail: token
+      ? 'Using your Claude setup token from Infisical (Max plan)'
+      : 'CLAUDE_CODE_OAUTH_TOKEN is missing from Infisical. The engineer is off until it is there.',
   })
 
   const ffmpeg = await run('/usr/bin/which', [process.env.GP_FFMPEG ?? 'ffmpeg'])
@@ -201,25 +190,4 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
         : `Nothing on UDP ${d.port} yet. In F1 23: Settings → Telemetry: UDP On, Broadcast Off, IP 127.0.0.1, port ${d.port}, format 2023, Your Telemetry Public.`,
   })
   return checks
-}
-
-/** First-run setup: write the API keys into <home>/.env, keeping any other lines in it. */
-export function saveKeys(home: string, keys: SetupKeys): string {
-  const file = join(home, '.env')
-  const lines = existsSync(file) ? readFileSync(file, 'utf8').split(/\r?\n/) : []
-  const set = (name: string, value: string | undefined) => {
-    const v = value?.trim()
-    if (!v) return
-    if (!/^[\w.-]+$/.test(v)) throw new Error(`${name} doesn't look like an API key`)
-    const i = lines.findIndex((l) => l.replace(/^export\s+/, '').startsWith(`${name}=`))
-    if (i >= 0) lines[i] = `${name}=${v}`
-    else lines.push(`${name}=${v}`)
-    process.env[name] = v
-  }
-  set('DEEPGRAM_API_KEY', keys.deepgram)
-  set('ELEVENLABS_API_KEY', keys.elevenlabs)
-  writeFileSync(file, `${lines.filter((l, i) => l || i < lines.length - 1).join('\n')}\n`, {
-    mode: 0o600,
-  })
-  return file
 }
