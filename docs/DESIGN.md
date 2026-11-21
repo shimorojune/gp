@@ -17,7 +17,9 @@ still use their own inline CSS. Moving the screens onto `@gp/ui` is the next, se
   and event banners.
 - **Not arcade.** Rohit rejected the first, louder pass (italic black caps, red slabs, red
   waveform, slanted banners) as "arcadey". The rules are:
-  - Type is upright, with no italics anywhere. Weights stay between 400 and 600.
+  - Type is upright, with no italics anywhere.
+  - Weights stay between 400 and 600. The exceptions are broadcast names and the radio card
+    header, which use 800 expanded like the TV cards.
   - Caps are only for short labels and driver codes. Spoken lines are in sentence case.
   - Red appears only as a 2 to 3px line or a small dot, never as a filled block, except the
     primary button.
@@ -126,7 +128,7 @@ The CSS lives in `components.css` (core) and `broadcast.css`. The TypeScript liv
 | Empty and error states | `emptyState()`, `errorState()` | Error includes a monospace detail line for logs. |
 | Driver strip | `driverStrip()` | The light name bar (position tab, team bar, name, optional flag such as a tyre), a big value toned by timing or delta, an aside time with a caption, and sector ticks. |
 | Tower | `tower()` | Head (`LAP 7/58`, `Q2 0:04`), rows with your row marked by a raised surface and a red edge, fastest, pit and out states, plus an optional red note and a live lap time. |
-| Radio card | `radioCard()`, `animateWaveform()` | A red dot, the speaker and a tag, a thin grey waveform, then the lines in sentence case. GP's line is white with a red edge; yours is muted and smaller. Feed `animateWaveform` from an `AnalyserNode` on GP's audio. |
+| Radio card | `radioCard()`, `animateWaveform()` | TV team-radio style, modelled on Rohit's references. The speaker name is heavy and expanded in team colour, over a white "RADIO". A big car number or position in team colour sits on a glowing team-colour waveform. Quotes are in caps: driver lines are white and left-aligned, and GP's lines are team colour and right-aligned. Team colour comes from `teamId` and defaults to GP red. Feed `animateWaveform` from an `AnalyserNode` on GP's audio. |
 | Banner | `banner()` | Kinds: fastest (purple), warn (safety car), accent (box box) and info (PB). A dark bar with a coloured edge and tag text. |
 | Ghost number | `ghostNumber()` | A big faded team-coloured number behind a card, for Review headers. |
 | Input cluster | `inputs()` | Speed with throttle and brake bars. Off by default on the overlay. |

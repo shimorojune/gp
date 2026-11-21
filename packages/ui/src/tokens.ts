@@ -216,6 +216,8 @@ export const font = {
   weightMedium: '500',
   weightSemibold: '600',
   weightBold: '700',
+  /** Broadcast names and the radio card header only. */
+  weightHeavy: '800',
 } as const
 
 /** Type scale for the app window. [size, line-height]. */

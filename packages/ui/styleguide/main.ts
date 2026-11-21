@@ -368,12 +368,23 @@ const broadcast = sec(
   ${h3('Radio card')}<div class="sg-row">
     <div class="sg-game" style="width:340px;aspect-ratio:auto;padding:16px">${radioCard({
       speaker: 'GP',
+      number: 4,
+      teamId: 8,
       lines: [
         { who: 'driver', text: 'Rears are going.' },
         { who: 'gp', text: 'Copy. Two more laps, then box. Manage the exits.' },
       ],
     })}</div>
-    <div class="sg-game" style="width:340px;aspect-ratio:auto;padding:16px">${radioCard({ speaker: 'You', tag: 'Talking', lines: [{ who: 'driver', text: 'What is the gap behind?' }] })}</div>
+    <div class="sg-game" style="width:340px;aspect-ratio:auto;padding:16px">${radioCard({
+      speaker: 'GP',
+      number: 16,
+      teamId: 1,
+      lines: [
+        { who: 'driver', text: 'What is the gap behind?' },
+        { who: 'gp', text: '1.4. He is not closing.' },
+      ],
+    })}</div>
+    <div class="sg-game" style="width:340px;aspect-ratio:auto;padding:16px">${radioCard({ speaker: 'GP', number: 63, teamId: 0, speaking: false, lines: [{ who: 'gp', text: 'Good lap. Purple in sector two.' }] })}</div>
   </div>
   ${h3('Banners')}<div class="sg-box">
     ${banner('fastest', 'Fastest lap', raw('You <span class="gp-num">1:29.412</span>'))}
@@ -404,6 +415,8 @@ const overlaySec = sec(
     })}</div>
     <div class="sg-ov" style="right:2.5%;top:30%">${radioCard({
       speaker: 'GP',
+      number: 3,
+      teamId: 8,
       lines: [
         { who: 'driver', text: 'Gap behind?' },
         { who: 'gp', text: 'Hamilton 0.8. He is on older mediums. Defend into Stowe.' },

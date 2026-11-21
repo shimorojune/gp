@@ -122,9 +122,13 @@ export interface RadioLine {
   text: string
 }
 export interface RadioCardOptions {
-  /** Who is speaking now; shown big in the header. */
+  /** Whose radio, shown big in team colour: "GP", the driver's surname... */
   speaker: string
   tag?: string
+  /** Car number or position shown big on the waveform. */
+  number?: number | string
+  /** Team colour for name, number, waveform and GP's lines. Defaults to GP red. */
+  teamId?: number | null
   lines: RadioLine[]
   speaking?: boolean
   /** Number of waveform bars. */
@@ -132,20 +136,23 @@ export interface RadioCardOptions {
   state?: 'in' | 'out'
 }
 /**
- * Radio card: speaker, a waveform strip, then the quoted lines. GP's lines take the accent
- * colour, the driver's are muted. Drive the waveform with `animateWaveform()`.
+ * TV-style team-radio card. Driver lines are white and left-aligned; GP's lines are team colour
+ * and right-aligned. Drive the waveform with `animateWaveform()`.
  */
 export function radioCard(o: RadioCardOptions): string {
-  const n = o.bars ?? 36
+  const n = o.bars ?? 28
   const bars = Array.from({ length: n }, () => '<i></i>').join('')
   const lines = o.lines
     .map((l) => `<p class="gp-radio-line gp-radio-line--${l.who}">${esc(l.text)}</p>`)
     .join('')
-  return `<div class="gp-radio" data-state="${o.state ?? 'in'}" data-speaking="${o.speaking ?? true}" role="log" aria-live="polite">
+  const team = o.teamId != null ? ` style="${teamStyle(o.teamId)}"` : ''
+  return `<div class="gp-radio" data-state="${o.state ?? 'in'}" data-speaking="${o.speaking ?? true}" role="log" aria-live="polite"${team}>
     <div class="gp-radio-head"><span class="gp-radio-who">${esc(o.speaker)}</span><span class="gp-radio-tag">${esc(
       o.tag ?? 'Radio',
     )}</span></div>
-    <div class="gp-radio-wave" aria-hidden="true">${bars}</div>
+    <div class="gp-radio-band" aria-hidden="true">${
+      o.number !== undefined ? `<span class="gp-radio-num">${esc(o.number)}</span>` : ''
+    }<div class="gp-radio-wave">${bars}</div></div>
     <div class="gp-radio-lines">${lines}</div>
   </div>`
 }
