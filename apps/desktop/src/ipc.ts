@@ -38,6 +38,7 @@ export const IPC = {
   settingsSave: 'gp:settings-save',
   voiceTest: 'gp:voice-test',
   dataInfo: 'gp:data-info',
+  setProgram: 'gp:set-program',
   sessionDetail: 'gp:session-detail',
 } as const
 
@@ -308,6 +309,8 @@ export interface GpBridge {
   /** GP says one short line through the normal voice path. Resolves when it's been handed to the player. */
   testVoice(): Promise<{ tts: string } | { error: string }>
   dataInfo(): Promise<DataInfo>
+  /** Re-file a session detection got wrong. Career only works for game career sessions. */
+  setProgram(uid: string, program: Program): Promise<SessionDetail | { error: string }>
 }
 
 export interface RadioPrefsInfo {
@@ -458,8 +461,12 @@ export interface SessionDetail extends SessionListItem {
     bestLapMs: number | null
     status: string | null
   }[]
-  /** GP's debrief, as he wrote it. */
+  /** GP's one-line record of the session (always there once debriefed). */
   debrief: string | null
+  /** The debrief pane's three parts; null for sessions debriefed before they existed. */
+  debriefParts: { well: string; cost: string; work: string } | null
+  /** His best valid lap at this track in the same car before this session (any program). */
+  pbMs: number | null
   /** Setups used (session start first), as name -> value maps. */
   setups: { key: string; values: Record<string, number> }[]
 }

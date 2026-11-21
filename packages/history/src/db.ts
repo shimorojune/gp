@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 7
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -80,7 +80,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   replaced_by TEXT,
   ended INTEGER NOT NULL DEFAULT 0,
   formula TEXT,
-  car TEXT
+  car TEXT,
+  -- GP's debrief for the driver as JSON {well, cost, work}; summary stays the one-line record
+  debrief_parts TEXT,
+  -- The driver re-filed it (career | time_trial | sim); NULL = as detected
+  filed_as TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_track ON sessions(track_id, program, started_at);
 CREATE INDEX IF NOT EXISTS sessions_weekend ON sessions(weekend_link);
@@ -272,6 +276,10 @@ export class HistoryDb {
              SELECT season_link, MIN(started_at), MIN(started_at), MAX(team) FROM sessions
              WHERE program = 'career' AND season_link != 0 GROUP BY season_link;`,
         )
+      }
+      if (v >= 1 && v < 7) {
+        this.db.exec('ALTER TABLE sessions ADD COLUMN debrief_parts TEXT')
+        this.db.exec('ALTER TABLE sessions ADD COLUMN filed_as TEXT')
       }
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
       if (v >= 1 && v < 5) this.tx(() => this.dedupeCareer())
@@ -726,6 +734,13 @@ export class HistoryDb {
       )
       .all(since, limit) as { id: number }[]
     return rows.map((r) => r.id)
+  }
+
+  /** GP's debrief in three parts, for the debrief pane. */
+  setDebriefParts(sessionId: number, parts: { well: string; cost: string; work: string }): void {
+    this.db
+      .prepare('UPDATE sessions SET debrief_parts = ? WHERE id = ?')
+      .run(JSON.stringify(parts), sessionId)
   }
 
   setSummary(sessionId: number, summary: string): void {

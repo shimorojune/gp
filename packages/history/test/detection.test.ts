@@ -213,6 +213,7 @@ describe('careers above seasons', () => {
       ALTER TABLE sessions DROP COLUMN status; ALTER TABLE sessions DROP COLUMN replaced_by;
       ALTER TABLE sessions DROP COLUMN ended; ALTER TABLE sessions DROP COLUMN formula;
       ALTER TABLE sessions DROP COLUMN car; ALTER TABLE incidents DROP COLUMN undone;
+      ALTER TABLE sessions DROP COLUMN debrief_parts; ALTER TABLE sessions DROP COLUMN filed_as;
       PRAGMA user_version = 5`)
     db.close()
     const again = new HistoryDb(file)

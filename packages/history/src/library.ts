@@ -109,13 +109,17 @@ export interface LibraryDetail extends LibraryItem {
     status: string | null
   }[]
   debrief: string | null
+  /** GP's debrief in the pane's three parts; null for sessions debriefed before it existed. */
+  debriefParts: { well: string; cost: string; work: string } | null
+  /** His best valid lap here in the same car before this session (any program), or null. */
+  pbMs: number | null
   setups: { key: string; values: Record<string, number> }[]
 }
 
 type R = Record<string, string | number | null>
 
-const PROGRAM_SQL = `CASE WHEN s.program = 'career' THEN 'career'
-  WHEN s.session_type = 'Time Trial' OR s.mode = 'Time Trial' THEN 'time_trial' ELSE 'sim' END`
+const PROGRAM_SQL = `COALESCE(s.filed_as, CASE WHEN s.program = 'career' THEN 'career'
+  WHEN s.session_type = 'Time Trial' OR s.mode = 'Time Trial' THEN 'time_trial' ELSE 'sim' END)`
 
 const SELECT = `SELECT s.*, ${PROGRAM_SQL} AS prog, c.id AS career_id, c.name AS career_name,
   se.number AS season_number
@@ -242,6 +246,57 @@ export function stintsOf(laps: LibraryDetail['laps']): LibraryDetail['stints'] {
   return out
 }
 
+function parts(v: unknown): LibraryDetail['debriefParts'] {
+  if (typeof v !== 'string') return null
+  try {
+    const p = JSON.parse(v) as Record<string, unknown>
+    return typeof p.well === 'string' && typeof p.cost === 'string' && typeof p.work === 'string'
+      ? { well: p.well, cost: p.cost, work: p.work }
+      : null
+  } catch {
+    return null
+  }
+}
+
+function priorPb(h: HistoryDb, r: R): number | null {
+  const car = r.car ?? r.team
+  const row = h.db
+    .prepare(
+      `SELECT MIN(l.lap_ms) AS pb FROM laps l JOIN sessions p ON p.id = l.session_id
+       WHERE p.track_id = ? AND p.started_at < ? AND COALESCE(p.car, p.team) IS ?
+         AND l.valid = 1 AND l.flashback = 0 AND l.lap_ms > 0`,
+    )
+    .get(r.track_id ?? null, r.started_at ?? null, car ?? null) as { pb: number | null }
+  return row.pb
+}
+
+/**
+ * The driver re-files a session detection got wrong. Career needs the game's season link, so
+ * only sessions the game marked as career mode (season link set) can be filed as career.
+ */
+export function setProgram(h: HistoryDb, uid: string, program: LibraryProgram): void {
+  const s = h.db
+    .prepare('SELECT id, season_link, team, started_at FROM sessions WHERE uid = ?')
+    .get(uid) as
+    | { id: number; season_link: number | null; team: string | null; started_at: string }
+    | undefined
+  if (!s) throw new Error('No such session')
+  if (program === 'career' && !s.season_link)
+    throw new Error(
+      "The game didn't mark this as a career session, so it has no season to file under",
+    )
+  h.db
+    .prepare('UPDATE sessions SET filed_as = ?, program = ? WHERE id = ?')
+    .run(program, program === 'career' ? 'career' : 'sim', s.id)
+  if (program === 'career')
+    h.db
+      .prepare(
+        `INSERT INTO seasons (season_link, team, first_seen, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (season_link) DO NOTHING`,
+      )
+      .run(s.season_link, s.team, s.started_at, new Date().toISOString())
+}
+
 export function sessionDetail(
   h: HistoryDb,
   uid: string,
@@ -332,6 +387,8 @@ export function sessionDetail(
       status: str(c.status),
     })),
     debrief: str(r.summary),
+    debriefParts: parts(r.debrief_parts),
+    pbMs: priorPb(h, r),
     setups,
   }
 }

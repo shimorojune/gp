@@ -164,6 +164,10 @@ CREATE TABLE gp_seasons (
   updated_at TEXT NOT NULL
 );
 `,
+  // 3: GP's three-part debrief, and sessions the driver re-filed.
+  `
+ALTER TABLE gp_sessions ADD COLUMN debrief_parts TEXT, ADD COLUMN filed_as TEXT;
+`,
 ]
 
 /** BIGINT comes back as a string by default; GP's ids all fit a JS number. */

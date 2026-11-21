@@ -6,6 +6,7 @@ import {
   HistoryDb,
   HistorySync,
   type LapRecord,
+  PG_MIGRATIONS,
   PgStore,
   SessionCollector,
   assignSeason,
@@ -118,7 +119,7 @@ describe.skipIf(!PG_URL)('Postgres sync', () => {
     expect(sync.localStatus().pending).toBe(2)
     const first = await sync.sync()
     expect(first).toMatchObject({ pushed: 2, pulled: 0, pending: 0, error: null })
-    expect(await store.migrate()).toBe(2)
+    expect(await store.migrate()).toBe(PG_MIGRATIONS.length)
 
     const again = await sync.sync()
     expect(again.pushed).toBe(0)

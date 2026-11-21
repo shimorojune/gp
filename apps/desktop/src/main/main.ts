@@ -28,6 +28,7 @@ import {
   recentSessionsView,
   renameCareer,
   sessionDetail,
+  setProgram,
   unassignedSeasons,
 } from '@gp/history'
 import {
@@ -58,6 +59,7 @@ import {
   type DataInfo,
   IPC,
   type NotesData,
+  type Program,
   type RecordingState,
   type SessionDetail,
   type SessionFilter,
@@ -581,6 +583,15 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.handle(IPC.voiceTest, () => voice.testLine())
+  ipcMain.handle(IPC.setProgram, (_e, uid: string, program: Program) => {
+    try {
+      setProgram(history, uid, program)
+      void sync?.sync()
+      return sessionDetail(history, uid, sync?.pendingUids()) ?? { error: 'No such session' }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
   ipcMain.handle(
     IPC.dataInfo,
     (): DataInfo => ({

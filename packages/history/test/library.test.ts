@@ -8,6 +8,7 @@ import {
   assignSeason,
   listSessions,
   sessionDetail,
+  setProgram,
 } from '../src/index.ts'
 
 const parsed = (buf: Buffer): Packet => {
@@ -110,5 +111,38 @@ describe('debrief library', () => {
       { lap: 2, kind: 'warning', detail: 'corner cutting', sessionTime: 150, undone: true },
     ])
     expect(sessionDetail(db, 'nope')).toBeNull()
+    expect(d.debriefParts).toBeNull()
+  })
+
+  it('reads three-part debriefs and the PB before this session in the same car', () => {
+    const id = (db.db.prepare("SELECT id FROM sessions WHERE uid = '3'").get() as { id: number }).id
+    db.setDebriefParts(id, { well: 'Clean stint.', cost: 'Lap 2 off.', work: 'Turn 1 entry.' })
+    expect(sessionDetail(db, '3')!.debriefParts).toEqual({
+      well: 'Clean stint.',
+      cost: 'Lap 2 off.',
+      work: 'Turn 1 entry.',
+    })
+    // Session 1 (same track and car, earlier) set 80000; lap 2 of session 3 was invalid.
+    expect(sessionDetail(db, '1')!.pbMs).toBeNull()
+    db.saveSession(
+      record('4', {
+        sessionType: 'Time Trial',
+        mode: 'Time Trial',
+        car: 'Ferrari',
+        startedAt: '2026-11-04T18:00:00.000Z',
+        laps: [lap(1, 79000)],
+      }),
+      'd',
+    )
+    expect(sessionDetail(db, '4')!.pbMs).toBe(80000)
+  })
+
+  it('re-files a session, and refuses career without a game season', () => {
+    setProgram(db, '3', 'time_trial')
+    expect(sessionDetail(db, '3')!.program).toBe('time_trial')
+    expect(listSessions(db, { program: 'time_trial' }).map((s) => s.uid)).toEqual(['4', '3', '2'])
+    expect(() => setProgram(db, '3', 'career')).toThrow(/season/)
+    setProgram(db, '3', 'sim')
+    expect(sessionDetail(db, '3')!.program).toBe('sim')
   })
 })

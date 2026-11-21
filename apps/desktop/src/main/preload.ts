@@ -46,6 +46,7 @@ const bridge: GpBridge = {
   saveSettings: (patch) => ipcRenderer.invoke(IPC.settingsSave, patch),
   testVoice: () => ipcRenderer.invoke(IPC.voiceTest),
   dataInfo: () => ipcRenderer.invoke(IPC.dataInfo),
+  setProgram: (uid, program) => ipcRenderer.invoke(IPC.setProgram, uid, program),
   sessionDetail: (uid) => ipcRenderer.invoke(IPC.sessionDetail, uid),
   ask: (text) => ipcRenderer.invoke(IPC.chatAsk, text),
   onChat: (cb) => {

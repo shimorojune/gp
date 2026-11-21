@@ -346,9 +346,14 @@ export function attachHistory(
 }
 
 const DEBRIEF_PROMPT = `You keep a race engineer's private notes on one sim racing driver (F1 23). You get the data for one session he just finished, his history at that track, and the current profile. Reply with JSON only, no prose around it:
-{"summary": "...", "profile": "..."}
+{"summary": "...", "well": "...", "cost": "...", "work": "...", "profile": "..."}
 
 summary: one or two plain sentences on this session for the engineer's records. Facts and numbers: pace vs his PB and best sectors there, consistency, result, mistakes (flashbacks, penalties, places lost), and the single most useful thing to work on next. No praise words, no exclamation marks.
+
+well, cost, work: the debrief he reads after the session, in your voice as his engineer, talking to him ("you"). Calm and specific, numbers where they help, no exclamation marks, no gushing.
+- well: what went well, one or two sentences. Always find something real (a sector, a clean stint, consistency, a move); never invent it.
+- cost: where the time or the result went, one or two sentences, most expensive first (with the time or places if the data shows it).
+- work: the one thing to work on next time, one sentence, concrete.
 
 profile: the updated profile, at most 900 characters, exactly these four lines:
 Strengths: ...
@@ -405,9 +410,21 @@ export async function debriefSession(
   for await (const m of q) if (m.type === 'result' && m.subtype === 'success') text = m.result
   const match = text.match(/\{[\s\S]*\}/)
   if (!match) return null
-  const out = JSON.parse(match[0]) as { summary?: string; profile?: string }
+  const out = JSON.parse(match[0]) as {
+    summary?: string
+    profile?: string
+    well?: string
+    cost?: string
+    work?: string
+  }
   if (!out.summary || !out.profile) return null
   history.setSummary(sessionId, out.summary.trim())
+  if (out.well && out.cost && out.work)
+    history.setDebriefParts(sessionId, {
+      well: out.well.trim(),
+      cost: out.cost.trim(),
+      work: out.work.trim(),
+    })
   // The model saw the current profile (including any edits he made) and refines it.
   history.setProfile(out.profile.slice(0, 1200), 'engineer')
   return { summary: out.summary.trim(), profile: out.profile.trim() }
