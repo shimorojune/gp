@@ -14,6 +14,9 @@ export const IPC = {
   noteAdd: 'gp:note-add',
   noteRemove: 'gp:note-remove',
   appInfo: 'gp:app-info',
+  updateState: 'gp:update-state',
+  updateCheck: 'gp:update-check',
+  updateInstall: 'gp:update-install',
 } as const
 
 export interface NoteItem {
@@ -91,6 +94,28 @@ export interface SnapshotMessage {
   recording: RecordingState
 }
 
+/** The self-updater (main/updater.ts). */
+export interface UpdateState {
+  phase:
+    | 'disabled'
+    | 'idle'
+    | 'checking'
+    | 'up-to-date'
+    | 'downloading'
+    | 'verifying'
+    | 'ready'
+    | 'installing'
+    | 'error'
+  current: string
+  /** The new version, when there is one. */
+  version?: string
+  /** Download progress, 0-100. */
+  progress?: number
+  message?: string
+  notes?: string
+  checkedAt?: string
+}
+
 /** Which build is running. */
 export interface AppInfo {
   version: string
@@ -113,6 +138,10 @@ export interface GpBridge {
   addNote(note: { category: string; text: string; track?: string }): Promise<NotesData>
   removeNote(id: string): Promise<NotesData>
   appInfo(): Promise<AppInfo>
+  onUpdate(cb: (s: UpdateState) => void): void
+  checkUpdate(): Promise<UpdateState>
+  /** Quits and installs; resolves with a reason when it can't. */
+  installUpdate(): Promise<string | null>
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */

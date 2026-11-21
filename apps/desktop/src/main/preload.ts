@@ -6,6 +6,7 @@ import {
   type GpBridge,
   IPC,
   type SnapshotMessage,
+  type UpdateState,
 } from '../ipc.ts'
 
 const bridge: GpBridge = {
@@ -22,6 +23,11 @@ const bridge: GpBridge = {
   addNote: (note) => ipcRenderer.invoke(IPC.noteAdd, note),
   removeNote: (id) => ipcRenderer.invoke(IPC.noteRemove, id),
   appInfo: () => ipcRenderer.invoke(IPC.appInfo),
+  onUpdate(cb) {
+    ipcRenderer.on(IPC.updateState, (_e, s: UpdateState) => cb(s))
+  },
+  checkUpdate: () => ipcRenderer.invoke(IPC.updateCheck),
+  installUpdate: () => ipcRenderer.invoke(IPC.updateInstall),
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)

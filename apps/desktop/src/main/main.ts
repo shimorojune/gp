@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
-import { createWriteStream, existsSync, mkdirSync, renameSync } from 'node:fs'
-import { join, sep } from 'node:path'
+import { createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve, sep } from 'node:path'
 import { format } from 'node:util'
 import {
   EngineerSession,
@@ -32,7 +33,9 @@ import {
   type NotesData,
   type RecordingState,
   type SnapshotMessage,
+  type UpdateState,
 } from '../ipc.ts'
+import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
 const PORT = Number(process.env.GP_UDP_PORT ?? DEFAULT_PORT)
@@ -164,7 +167,11 @@ listener.on('packet', (p) => {
 // Record every session automatically (one file per session) unless GP_AUTO_RECORD=0 or the
 // driver switched recording off in the dashboard.
 let autoRecord = process.env.GP_AUTO_RECORD !== '0'
+/** When the last UDP packet arrived: the updater only downloads and installs when it's quiet. */
+let lastPacketAt = 0
+const UPDATE_IDLE_MS = Number(process.env.GP_UPDATE_IDLE_MS ?? 120_000)
 listener.on('raw', ({ buf, at }) => {
+  lastPacketAt = Date.now()
   if (!writer && autoRecord) startRecording()
   writer?.write(buf, at)
 })
@@ -323,6 +330,9 @@ function toggleChat(): void {
 
 // A second copy would share UDP 20777 with the first and split the telemetry between them
 // (each sees only some packets), so the radio calls silently go missing. One copy only.
+// The self-check (also run by the updater on a downloaded version while GP is open) gets its own
+// profile, so it neither trips over the running copy's lock nor touches its profile.
+if (SMOKE) app.setPath('userData', mkdtempSync(join(tmpdir(), 'gp-smoke-profile-')))
 if (!app.requestSingleInstanceLock()) {
   console.log('[main] GP is already running; quitting this copy')
   app.quit()
@@ -433,6 +443,7 @@ app.whenReady().then(async () => {
   chatWin = createChatWindow()
   engineer.start()
   voice.start()
+  startUpdater()
 
   // 10 Hz is plenty for a dashboard; the store itself ingests at full rate.
   setInterval(() => {
@@ -451,6 +462,46 @@ app.whenReady().then(async () => {
     win.webContents.send(IPC.snapshot, msg)
   }, 100)
 })
+
+// Self-updater: GitHub Releases -> ~/Documents/GP/updates -> helper-script swap (updater.ts).
+const toDash = (s: UpdateState) => win?.webContents.send(IPC.updateState, s)
+const updater = new Updater({
+  currentVersion: BUILD.version,
+  // .../GP.app/Contents/MacOS/GP -> .../GP.app
+  appPath: app.isPackaged ? resolve(app.getPath('exe'), '..', '..', '..') : null,
+  packaged: app.isPackaged,
+  dir: join(GP_HOME, 'updates'),
+  ...(process.env.GP_UPDATE_FEED ? { feed: process.env.GP_UPDATE_FEED } : {}),
+  isIdle: () => Date.now() - lastPacketAt > UPDATE_IDLE_MS,
+  onState: (s) => {
+    toDash(s)
+    // Only for the end-to-end updater test in CI: install as soon as it's ready.
+    if (s.phase === 'ready' && process.env.GP_UPDATE_AUTO_INSTALL === '1') void installUpdate()
+  },
+  log: (l) => console.log(l),
+})
+
+async function installUpdate(): Promise<string | null> {
+  const err = await updater.install(process.pid)
+  if (!err) app.quit()
+  return err
+}
+
+function startUpdater(): void {
+  ipcMain.handle(IPC.updateCheck, () => updater.check(true))
+  ipcMain.handle(IPC.updateInstall, () => installUpdate())
+  win?.webContents.once('did-finish-load', () => {
+    toDash(updater.state)
+    // Healthy = windows loaded and still running a few seconds later; tells a pending update's
+    // helper script not to roll back.
+    // GP_E2E_SKIP_HEALTH: the updater test's way of faking a version that won't start.
+    if (process.env.GP_E2E_SKIP_HEALTH === '1') return
+    setTimeout(() => void updater.reportHealthy().catch((e) => console.error('[update]', e)), 8000)
+  })
+  void updater
+    .start(Number(process.env.GP_UPDATE_FIRST_CHECK_MS ?? 30_000))
+    .catch((e) => console.error('[update]', e))
+}
 
 /** Packaging check, run by scripts/package.mjs on the built app (no Claude login needed). */
 async function smokeTest(): Promise<void> {
@@ -484,10 +535,13 @@ async function smokeTest(): Promise<void> {
   }
   await check('dashboardVersion', () => shownVersion(win))
   await check('overlayVersion', () => shownVersion(chatWin))
-  await check('hotkey', () => {
-    if (!globalShortcut.isRegistered(CHAT_HOTKEY)) throw new Error(`${CHAT_HOTKEY} not registered`)
-    return CHAT_HOTKEY
-  })
+  // The running GP owns the hotkey while the updater checks a new version beside it.
+  if (!process.env.GP_SMOKE_BESIDE_RUNNING)
+    await check('hotkey', () => {
+      if (!globalShortcut.isRegistered(CHAT_HOTKEY))
+        throw new Error(`${CHAT_HOTKEY} not registered`)
+      return CHAT_HOTKEY
+    })
   // node-hid's native addon (N-API prebuild) loads in this Electron.
   await check('hidDevices', () => HID.devices().length)
   await check('claude', () => {

@@ -4,7 +4,8 @@
 # gp-release.json to a GitHub Release.
 #
 # Push to a claude/** branch: same checks, plus a package build + smoke test, uploaded as a
-# workflow artifact (no release), to try a build before it lands on main.
+# workflow artifact (no release), to try a build before it lands on main. Branch builds also
+# run the self-updater end-to-end test (scripts/e2e-update.mjs).
 name: Release
 
 on:
@@ -25,7 +26,7 @@ jobs:
   release:
     # Apple Silicon runner (macos-14 jobs were cancelled before starting, Nov 2026): builds and runs the arm64 app natively.
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       # No git hooks in CI (the release commit carries long release notes).
       HUSKY: '0'
@@ -56,6 +57,10 @@ jobs:
       - name: Package and smoke test (branch build)
         if: github.ref != 'refs/heads/main'
         run: pnpm package
+
+      - name: Self-updater end-to-end test (branch build)
+        if: github.ref != 'refs/heads/main'
+        run: node apps/desktop/scripts/e2e-update.mjs
 
       - name: Upload branch build
         if: github.ref != 'refs/heads/main'

@@ -31,10 +31,10 @@ import { Arch, Platform, build } from 'electron-builder'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const stage = join(root, '.stage')
-const out = join(root, 'release')
+const out = process.env.GP_RELEASE_DIR ?? join(root, 'release')
 const readJson = (p) => JSON.parse(readFileSync(p, 'utf8'))
 const pkg = readJson(join(root, 'package.json'))
-const { version } = pkg
+const version = process.env.GP_VERSION ?? pkg.version
 const run = (cmd, args, opts = {}) => execFileSync(cmd, args, { stdio: 'inherit', ...opts })
 
 /** Version of a dependency as pnpm installed it for apps/desktop (or next to `from`). */

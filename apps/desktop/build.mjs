@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, mkdirSync, readFileSync } from 'node:fs'
 import { build } from 'esbuild'
 
-const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+// GP_VERSION: the updater end-to-end test builds throwaway prerelease versions.
+const version = process.env.GP_VERSION ?? JSON.parse(readFileSync('package.json', 'utf8')).version
 function commit() {
   if (process.env.GITHUB_SHA) return process.env.GITHUB_SHA.slice(0, 7)
   try {

@@ -1,5 +1,11 @@
 import { formatDelta, formatLapTime } from '@gp/shared'
-import { type GpBridge, type NotesData, type SnapshotMessage, versionLabel } from '../ipc.ts'
+import {
+  type GpBridge,
+  type NotesData,
+  type SnapshotMessage,
+  type UpdateState,
+  versionLabel,
+} from '../ipc.ts'
 import { RadioPlayer } from './audio.ts'
 
 declare global {
@@ -98,6 +104,33 @@ function render({ race, listener, recording }: SnapshotMessage): void {
 }
 
 window.gp.onSnapshot(render)
+
+// Self-updater: shown only when there's something to say or do.
+let update: UpdateState | null = null
+function renderUpdate(s: UpdateState): void {
+  update = s
+  const b = $('update') as HTMLButtonElement
+  const label: Partial<Record<UpdateState['phase'], string>> = {
+    downloading: `Downloading v${s.version} ${s.progress ?? 0}%`,
+    verifying: `Checking v${s.version}…`,
+    ready: `Update to v${s.version}`,
+    installing: `Installing v${s.version}…`,
+    error: s.version ? `Update v${s.version} failed` : 'Update failed',
+  }
+  const text = label[s.phase] ?? (s.message?.startsWith('Updated') ? s.message : '')
+  b.textContent = text
+  b.title = s.message ?? (s.phase === 'ready' ? 'Quit GP, install the update and reopen' : '')
+  b.disabled = s.phase !== 'ready' && s.phase !== 'error'
+  b.classList.toggle('hidden', !text)
+  b.classList.toggle('on', s.phase === 'error')
+}
+window.gp.onUpdate(renderUpdate)
+$('update').addEventListener('click', async () => {
+  if (update?.phase === 'ready') {
+    const why = await window.gp.installUpdate()
+    if (why) renderUpdate({ ...update, message: why })
+  } else renderUpdate(await window.gp.checkUpdate())
+})
 void window.gp.appInfo().then((a) => {
   $('ver').textContent = versionLabel(a)
 })
