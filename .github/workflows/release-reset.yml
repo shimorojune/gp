@@ -1,0 +1,43 @@
+# Manual cleanup: delete a GitHub Release and its tag, and optionally tag a commit as the
+# version baseline for semantic-release (e.g. v0.0.0, so the next feat: releases 0.1.0).
+# Used once on 2026-11-21 to replace the accidental v1.0.0 with the 0.x line.
+name: Release reset
+
+on:
+  workflow_dispatch:
+    inputs:
+      delete_tag:
+        description: Release + tag to delete (e.g. v1.0.0)
+        required: true
+      base_tag:
+        description: Baseline tag to create (optional, e.g. v0.0.0)
+        required: false
+      base_sha:
+        description: Commit for the baseline tag
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  reset:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Delete release and tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.delete_tag }}
+        run: |
+          gh release delete "$TAG" --yes --cleanup-tag || true
+          git push origin ":refs/tags/$TAG" || true
+      - name: Create baseline tag
+        if: inputs.base_tag != ''
+        env:
+          BASE_TAG: ${{ inputs.base_tag }}
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: |
+          git tag "$BASE_TAG" "$BASE_SHA"
+          git push origin "refs/tags/$BASE_TAG"

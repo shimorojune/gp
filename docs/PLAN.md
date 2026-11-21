@@ -600,7 +600,9 @@ is mostly a practice/quali feature.
    semantic-release on `main` (config `release.config.mjs`). Conventional commits decide the
    version (fix → patch, feat → minor, `!`/BREAKING CHANGE → major; chore/docs/refactor/test →
    no release); it bumps `apps/desktop/package.json` only, writes `apps/desktop/CHANGELOG.md`,
-   tags `vX.Y.Z`, attaches the zip, dmg and `gp-release.json`. `claude/**` branch pushes build
+   tags `vX.Y.Z`, attaches the zip, dmg and `gp-release.json`. Versions stay on **0.x** (Rohit, 2026-11-21): a
+   `v0.0.0` baseline tag made the first release 0.1.0, and a `releaseRules` entry turns breaking
+   changes into minor bumps instead of 1.0.0. The accidental v1.0.0 was deleted. `claude/**` branch pushes build
    + smoke-test the app and upload it as a workflow artifact, no release. commitlint runs in a
    husky `commit-msg` hook (installed by `pnpm install`). Version shows in the dashboard header
    and overlay title (`v1.2.0 (abc1234)`, or `dev …` from the repo).

@@ -23,7 +23,7 @@ ffmpeg (mic) and whisper-cli come from Homebrew.
 ## Releases
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (a `commit-msg`
-hook checks them): `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → major,
+hook checks them): `fix:` → patch, `feat:` → minor, `feat!:` / `BREAKING CHANGE:` → minor too (GP stays on 0.x),
 `chore:`/`docs:`/`refactor:`/`test:`/`ci:` → no release. Every push to `main` runs
 `.github/workflows/release.yml`, and semantic-release tags `vX.Y.Z`, updates
 `apps/desktop/CHANGELOG.md` and attaches the zip, dmg and `gp-release.json`.

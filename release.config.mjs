@@ -6,11 +6,22 @@
 //   GP-<version>-arm64.zip   the .app for updates (ditto -x -k)
 //   GP-<version>-arm64.dmg   first install
 //   gp-release.json          version, commit, sha256 + size of each file
+// Versions: the first release was 0.1.0 (a v0.0.0 tag marks the starting point), then
+// feat -> 0.x+1.0, fix/perf -> 0.x.y+1, breaking -> minor (see releaseRules below).
 export default {
   branches: ['main'],
   tagFormat: 'v${version}',
   plugins: [
-    ['@semantic-release/commit-analyzer', { preset: 'conventionalcommits' }],
+    [
+      '@semantic-release/commit-analyzer',
+      {
+        preset: 'conventionalcommits',
+        // GP stays on 0.x until Rohit decides otherwise: a breaking change (feat!: or a
+        // BREAKING CHANGE footer) is a minor bump, not 1.0.0. To go to 1.0.0 one day, delete
+        // this rule. (A matching custom rule replaces the default "breaking = major" rule.)
+        releaseRules: [{ breaking: true, release: 'minor' }],
+      },
+    ],
     ['@semantic-release/release-notes-generator', { preset: 'conventionalcommits' }],
     [
       '@semantic-release/changelog',
