@@ -79,6 +79,28 @@ export function teamColor(teamId: number | null | undefined): string {
   return (teamId != null && teamColors[teamId]) || color.accent
 }
 
+/** Same colours keyed by the team name GP stores ("McLaren", "Red Bull Racing"...); faint when unknown. */
+const TEAM_NAMES = [
+  'Mercedes',
+  'Ferrari',
+  'Red Bull Racing',
+  'Williams',
+  'Aston Martin',
+  'Alpine',
+  'AlphaTauri',
+  'Haas',
+  'McLaren',
+  'Alfa Romeo',
+]
+export function teamColorByName(name: string | null | undefined): string {
+  if (!name) return '#66666d'
+  const n = name.toLowerCase()
+  const i = TEAM_NAMES.findIndex(
+    (t) => n.startsWith(t.toLowerCase()) || t.toLowerCase().startsWith(n),
+  )
+  return i >= 0 ? (teamColors[i] ?? '#66666d') : '#66666d'
+}
+
 export const font = {
   /**
    * Broadcast face: names, numbers, labels, the radio card. 'GP Display' is the bundled Saira

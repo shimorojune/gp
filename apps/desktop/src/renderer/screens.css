@@ -652,3 +652,31 @@ textarea.gp-input {
 .card-head .gp-label {
   white-space: nowrap;
 }
+
+/* Debrief (app) */
+.say-text {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--gp-color-text);
+}
+.tbl .tr.is-link {
+  cursor: pointer;
+  border-radius: var(--gp-radius-sm);
+  transition: background-color var(--gp-motion-fast) var(--gp-motion-ease);
+}
+.tbl .tr.is-link:hover,
+.tbl .tr.is-link:focus-visible {
+  background: var(--gp-color-surface);
+  outline: none;
+}
+.gp-seg button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.attempt .gp-button {
+  margin-left: auto;
+  flex: none;
+}
+.hero > .is-wide {
+  grid-column: span 2;
+}

@@ -1,5 +1,6 @@
 import { RadioPlayer } from './audio.ts'
-import { chatInterim, debriefInterim } from './pages/interim.ts'
+import { debriefPage } from './pages/debrief.ts'
+import { chatInterim } from './pages/interim.ts'
 import { notesPage } from './pages/notes.ts'
 import { settingsPage } from './pages/settings.ts'
 import { statusPage } from './pages/status.ts'
@@ -33,7 +34,7 @@ const root = document.getElementById('root')!
 // The shell is in the page from the start (under the splash), so the version label is there
 // for the packaged-app self-check straight away.
 const shell = mountShell(root, {
-  debrief: debriefInterim,
+  debrief: debriefPage,
   chat: chatInterim,
   status: statusPage,
   notes: notesPage,

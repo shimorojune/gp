@@ -43,8 +43,11 @@ export function when(iso: string | null | undefined): string {
 /** "12 days ago", "yesterday", "today". */
 export function ago(iso: string | null | undefined): string {
   if (!iso) return ''
-  const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000)
-  if (Number.isNaN(days)) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  // Calendar days in local time: last night at 21:00 is "yesterday" at 09:00 today.
+  const midnight = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const days = Math.round((midnight(new Date()) - midnight(d)) / 86_400_000)
   return days <= 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`
 }
 
