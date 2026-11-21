@@ -82,9 +82,6 @@
 .gp-overlay {
   font-family: var(--gp-font-display);
 }
-.gp-italic {
-  font-style: italic;
-}
 .gp-caps {
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -360,7 +357,7 @@
 .gp-laptime--xl {
   font-size: var(--gp-type-num-xl-size);
   line-height: var(--gp-type-num-xl-line);
-  font-weight: var(--gp-font-weight-bold);
+  font-weight: var(--gp-font-weight-semibold);
 }
 
 /* ---------- Delta and gap ---------- */
@@ -998,7 +995,8 @@ select.gp-input {
 }
 .gp-overlay-label {
   font-size: var(--gp-overlay-font-size-label);
-  font-weight: var(--gp-font-weight-bold);
+  font-weight: var(--gp-font-weight-medium);
+  font-stretch: var(--gp-font-stretch-wide);
   letter-spacing: var(--gp-tracking-label);
   text-transform: uppercase;
   color: var(--gp-overlay-text-muted);

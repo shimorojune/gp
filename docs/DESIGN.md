@@ -12,9 +12,16 @@ still use their own inline CSS. Moving the screens onto `@gp/ui` is the next, se
 - **Base ("Pit wall").** Graphite surfaces taken from the app icon (`#15171c`), white text, and one
   red (`#e10600`). The app should feel like a timing screen, not a dashboard template.
 - **Broadcast structure.** Layout ideas come from F1 TV timing graphics: a light name bar with a
-  position tab, a slanted team-colour bar, the driver name in italic caps, a big italic number
-  with a smaller reference time beside it, sector ticks under it, a compact tower, a radio card
-  with a waveform, and slanted banners.
+  position tab, a thin team-colour bar, the driver name in caps, a big number with a smaller
+  reference time beside it, sector ticks under it, a compact tower, a radio card with a waveform,
+  and event banners.
+- **Not arcade.** Rohit rejected the first, louder pass (italic black caps, red slabs, red
+  waveform, slanted banners) as "arcadey". The rules are:
+  - Type is upright, with no italics anywhere. Weights stay between 400 and 600.
+  - Caps are only for short labels and driver codes. Spoken lines are in sentence case.
+  - Red appears only as a 2 to 3px line or a small dot, never as a filled block, except the
+    primary button.
+  - Banners are dark with a coloured edge and tag text.
 - **No borrowed marks.** GP draws all of its own shapes. There are no F1, FIA, team or sponsor
   logos, and the official broadcast font is not bundled.
 - **Dark only for now.** Dark is the primary theme. A light theme is not planned until a screen
@@ -70,11 +77,13 @@ Token rules:
 
 ## Type
 
-- **Display face: `--gp-font-display`.** This is "GP Display", a bundled copy of **Saira**
-  (OFL, variable weight, true italics, tabular figures).
-  - Use it for every number a driver compares, driver names, uppercase labels, tabs, and the
-    whole overlay.
-  - Big numbers are italic and bold. Driver names are italic caps at weight 800.
+- **Display face: `--gp-font-display`.** This is "GP Display", a bundled copy of **Archivo**
+  (OFL, variable weight and width, tabular figures).
+  - Use it for every number a driver compares, driver names, labels, tabs, and the whole overlay.
+  - Names and labels use a slightly extended width (`--gp-font-stretch-wide`, 112%), which gives
+    the broadcast feel without gimmicks.
+  - Numbers stay at normal width, weight 600, upright.
+  - Saira was tried first and dropped because it read as too techno/arcade.
 - **Body face: `--gp-font-sans`.** This is **Inter**, bundled. Use it for body text, forms and
   long notes in Garage and Review.
 - **Both faces are bundled.** The woff2 files are copied into `dist/fonts`, latin and latin-ext
@@ -113,10 +122,10 @@ The CSS lives in `components.css` (core) and `broadcast.css`. The TypeScript liv
 | Toast | `toast()` | Kinds: info, good, warn, bad. Errors stay until dismissed and use `role="alert"`. |
 | Push-to-talk | `ptt()` | States: idle, listening (red), thinking, speaking (GP talking) and off. Announced with `role="status"`. |
 | Empty and error states | `emptyState()`, `errorState()` | Error includes a monospace detail line for logs. |
-| Driver strip | `driverStrip()` | The light name bar (position tab, team bar, name, optional flag such as a tyre), a big italic value toned by timing or delta, an aside time with a caption, and sector ticks. |
-| Tower | `tower()` | Head (`LAP 7/58`, `Q2 0:04`), rows with your row inverted to the light name bar, fastest, pit and out states, plus an optional red note and a live lap time. |
-| Radio card | `radioCard()`, `animateWaveform()` | Speaker plus tag, a waveform strip and quoted lines. GP's lines are in the accent colour and yours are muted. Feed `animateWaveform` from an `AnalyserNode` on GP's audio. |
-| Banner | `banner()` | Kinds: fastest (purple), warn (safety car), accent (box box) and info (PB). The tag has a slanted cut. |
+| Driver strip | `driverStrip()` | The light name bar (position tab, team bar, name, optional flag such as a tyre), a big value toned by timing or delta, an aside time with a caption, and sector ticks. |
+| Tower | `tower()` | Head (`LAP 7/58`, `Q2 0:04`), rows with your row marked by a raised surface and a red edge, fastest, pit and out states, plus an optional red note and a live lap time. |
+| Radio card | `radioCard()`, `animateWaveform()` | A red dot, the speaker and a tag, a thin grey waveform, then the lines in sentence case. GP's line is white with a red edge; yours is muted and smaller. Feed `animateWaveform` from an `AnalyserNode` on GP's audio. |
+| Banner | `banner()` | Kinds: fastest (purple), warn (safety car), accent (box box) and info (PB). A dark bar with a coloured edge and tag text. |
 | Ghost number | `ghostNumber()` | A big faded team-coloured number behind a card, for Review headers. |
 | Input cluster | `inputs()` | Speed with throttle and brake bars. Off by default on the overlay. |
 | Overlay panel and callout | `.gp-overlay-panel`, `callout()`, `OverlayFader` | Plain panel for a single spoken line or readout. Fade cycle: in, then dim, then out. |
@@ -138,7 +147,7 @@ The CSS lives in `components.css` (core) and `broadcast.css`. The TypeScript liv
 - **Banners are rare.** They are for one-off events (fastest lap, PB, box, safety car) and stay
   up for about 4s.
 - **Type sizes.** Overlay body text is 18px or larger, calls are 26px, and readouts are 40 to
-  64px. Weight is 600 or more. Text gets a shadow, and the panel uses a 0.86 scrim (0.94 when
+  64px. Weight is 500 to 600. Text gets a shadow, and the panel uses a 0.86 scrim (0.94 when
   reduced transparency is on).
 
 ## Accessibility

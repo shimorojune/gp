@@ -7,7 +7,7 @@
  *
  * Direction "Pit wall + broadcast": graphite from the app icon, white text, one red (#e10600),
  * with structure borrowed from F1 TV timing graphics (light name bars, position tabs, team-colour
- * bars, big italic numbers, sector ticks). No blue, teal or cyan in the UI itself; the only blues
+ * bars, big numbers, sector ticks), kept quiet: upright type, weights 400-600, red used thin. No blue, teal or cyan in the UI itself; the only blues
  * are data colours (some teams, the wet tyre).
  */
 
@@ -155,11 +155,11 @@ export const overlay = {
   fontSizeReadout: '40px',
   fontSizeHero: '64px',
   fontWeightBody: '600',
-  fontWeightCall: '650',
-  fontWeightReadout: '700',
-  radius: '14px',
-  padding: '14px 18px',
-  accentBar: '4px',
+  fontWeightCall: '600',
+  fontWeightReadout: '600',
+  radius: '8px',
+  padding: '12px 16px',
+  accentBar: '2px',
   /** Radio card stays up this long after GP stops talking (ms, JS). */
   radioLingerMs: 4000,
   idleOpacity: '0.0',
@@ -173,10 +173,12 @@ export const overlay = {
 export const font = {
   /**
    * Display face for numbers, driver names, labels and the whole overlay. 'GP Display' is the
-   * bundled Saira (OFL). To use a licensed broadcast font, install it and put its family name
-   * first here; it must have tabular figures or lap times will jitter.
+   * bundled Archivo (OFL, variable weight and width). To use a licensed broadcast font, install
+   * it and put its family name first here; it must have tabular figures or lap times will jitter.
    */
-  display: "'GP Display', 'Saira Variable', Saira, 'Inter Variable', -apple-system, sans-serif",
+  display: "'GP Display', 'Archivo Variable', Archivo, 'Inter Variable', -apple-system, sans-serif",
+  /** Width for names and labels in the display face: a little extended, like broadcast type. */
+  stretchWide: '112%',
   /** Body text, forms, long notes. */
   sans: "'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
   mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -186,7 +188,6 @@ export const font = {
   weightMedium: '500',
   weightSemibold: '600',
   weightBold: '700',
-  weightBlack: '800',
 } as const
 
 /** Type scale for the app window. [size, line-height]. */

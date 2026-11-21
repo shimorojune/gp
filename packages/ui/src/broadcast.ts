@@ -53,7 +53,7 @@ export interface DriverStripOptions {
   sectors?: Array<TimingKind | 'current'>
   sectorLabels?: string[]
 }
-/** Light name bar on top, dark body with a big italic value, sector ticks underneath. */
+/** Light name bar on top, dark body with a big value, sector ticks underneath. */
 export function driverStrip(o: DriverStripOptions): string {
   const tone = o.tone && o.tone !== 'plain' && o.tone !== 'none' ? `gp-strip-value--${o.tone}` : ''
   return `<div class="gp-strip">

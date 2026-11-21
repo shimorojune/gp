@@ -111,7 +111,7 @@ const typeRows = Object.entries(type)
   .map(([k, [size, line]]) => {
     const num = k.startsWith('num')
     const sample = num
-      ? `<span class="gp-num gp-italic" style="font-size:${size};line-height:${line};font-weight:700">1:31.874 +2.315</span>`
+      ? `<span class="gp-num" style="font-size:${size};line-height:${line};font-weight:600">1:31.874 +2.315</span>`
       : `<span style="font-size:${size};line-height:${line};font-family:${
           ['display', 'heading', 'title'].includes(k) ? 'var(--gp-font-display)' : 'inherit'
         };font-weight:${['display', 'heading', 'title'].includes(k) ? 600 : 400}">${
@@ -126,13 +126,13 @@ const typeRows = Object.entries(type)
 const typography = sec(
   'type',
   'Type',
-  'Two faces. GP Display (bundled Saira, OFL) for numbers, names, labels and the whole overlay: wide, with true italics and tabular figures so times never jitter. Inter for body text and forms. The display face is one token (--gp-font-display) and can be swapped for a licensed broadcast font.',
+  'Two faces. GP Display (bundled Archivo, OFL) for numbers, names, labels and the whole overlay: a plain grotesque, set slightly extended for names and labels, with tabular figures so times never jitter. Upright and medium weight: no italics, nothing heavier than 600. Inter for body text and forms. The display face is one token (--gp-font-display) and can be swapped for a licensed broadcast font.',
   `<div class="gp-card"><div class="sg-spec">${typeRows}</div></div>
   ${h3('Tabular figures: every digit is the same width')}
   <div class="gp-card" style="display:flex;gap:32px">
-    <div class="gp-num gp-italic" style="font-size:34px;font-weight:700;line-height:1.15">1:11.111<br>1:08.808<br>0:59.000</div>
+    <div class="gp-num" style="font-size:34px;font-weight:600;line-height:1.15">1:11.111<br>1:08.808<br>0:59.000</div>
     <div class="gp-num" style="font-size:34px;font-weight:600;line-height:1.15">+0.111<br>−1.808<br>+12.000</div>
-    <div style="font-family:var(--gp-font-display);font-size:30px;font-weight:800;font-style:italic;text-transform:uppercase;line-height:1.2">Hülkenberg<br>Pérez · Box box</div>
+    <div style="font-family:var(--gp-font-display);font-size:30px;font-weight:600;text-transform:uppercase;line-height:1.2">Hülkenberg<br>Pérez · Box box</div>
   </div>`,
 )
 
@@ -223,7 +223,7 @@ const timing = `<div class="sg-row" style="gap:24px">
     ${lapTime({ ms: 71820, kind: 'overall', size: 'md' })} ${lapTime({ ms: 72034, kind: 'personal', size: 'md' })}
     ${lapTime({ ms: 72411, kind: 'slower', size: 'md' })} ${lapTime({ ms: 70990, kind: 'invalid', size: 'md' })}
     ${lapTime({ ms: null, size: 'md' })}
-    ${lapTime({ ms: 72034, size: 'xl', italic: true })}
+    ${lapTime({ ms: 72034, size: 'xl' })}
   </div>
   <div class="gp-card" style="display:flex;flex-direction:column;gap:10px;min-width:220px">
     <span class="gp-label">Delta</span>
@@ -334,7 +334,7 @@ const components = sec(
 const broadcast = sec(
   'broadcast',
   'Broadcast components',
-  'Borrowed structure from TV timing graphics: a light name bar with a position tab and a slanted team-colour bar, a big italic number with a smaller reference time, sector ticks underneath. GP draws its own shapes; there are no logos.',
+  'Borrowed structure from TV timing graphics: a light name bar with a position tab and a team-colour bar, a big number with a smaller reference time, sector ticks underneath. Kept quiet on purpose: upright type, medium weights, red only as a thin line. GP draws its own shapes; there are no logos.',
   `${h3('Driver strip')}<div class="sg-row">
     ${driverStrip({ position: 4, name: 'Tsunoda', teamId: 6, value: '+2.315', tone: 'slower', asideValue: '1:31.874', asideLabel: 'Alonso', sectors: ['overall', 'personal', 'slower'], sectorLabels: ['S1', 'S2', 'Sector 3'] })}
     ${driverStrip({ position: 1, name: 'You', teamId: 8, value: '1:29.412', tone: 'overall', asideValue: '−0.318', asideLabel: 'Fastest', flag: raw(tyre('soft')), sectors: ['overall', 'overall', 'personal'] })}
@@ -382,7 +382,7 @@ const broadcast = sec(
     ${banner('info', 'Personal best', raw('Monza <span class="gp-num">1:21.004</span>'))}
   </div>
   ${h3('Ghost number card, input cluster')}<div class="sg-row">
-    ${ghostNumber(81, 8, `<div class="gp-card" style="width:320px;background:transparent;display:flex;gap:14px;align-items:center;padding:18px 16px;border-bottom:3px solid ${teamColors[8]}"><span class="gp-postab" style="font-size:30px">1</span><div><div style="font-family:var(--gp-font-display);font-size:14px;font-weight:600;text-transform:uppercase">Oscar</div><div style="font-family:var(--gp-font-display);font-size:24px;font-weight:800;font-style:italic;text-transform:uppercase;line-height:1">Piastri</div></div></div>`)}
+    ${ghostNumber(81, 8, `<div class="gp-card" style="width:320px;background:transparent;display:flex;gap:14px;align-items:center;padding:18px 16px;border-bottom:3px solid ${teamColors[8]}"><span class="gp-postab" style="font-size:30px">1</span><div><div style="font-family:var(--gp-font-display);font-size:14px;font-weight:600;text-transform:uppercase">Oscar</div><div style="font-family:var(--gp-font-display);font-size:24px;font-weight:600;text-transform:uppercase;line-height:1">Piastri</div></div></div>`)}
     <div class="gp-card">${inputs({ speedKph: 287, throttle: 0.92, brake: 0.0 })} ${inputs({ speedKph: 112, throttle: 0, brake: 0.78 })}</div>
   </div>`,
 )
@@ -417,19 +417,19 @@ const overlaySec = sec(
   <div class="sg-game" style="aspect-ratio:auto;padding:24px;display:flex;gap:16px;align-items:flex-start">
     <div class="gp-overlay"><div class="gp-overlay-panel" data-state="in" style="width:440px">${callout('Box this lap. Mediums.')}</div></div>
     <div class="gp-overlay"><div class="gp-overlay-panel" data-state="in"><div class="gp-overlay-label">Gap ahead</div><div class="gp-overlay-readout">0.812</div></div></div>
-    <div class="gp-overlay"><div class="gp-overlay-panel" data-state="dim"><div class="gp-overlay-label">Target</div><div class="gp-overlay-readout gp-italic">1:28.1</div></div></div>
+    <div class="gp-overlay"><div class="gp-overlay-panel" data-state="dim"><div class="gp-overlay-label">Target</div><div class="gp-overlay-readout">1:28.1</div></div></div>
   </div>`,
 )
 
 const principles = sec(
   'principles',
   'GP design system',
-  'Pit wall calm, broadcast structure. Dark first. One red. Numbers are the hero and never jitter. The overlay says one thing at a time and gets out of the way. Full rules in docs/DESIGN.md.',
+  'Pit wall calm, broadcast structure, nothing arcade. Dark first. One red, used thin. Numbers are the hero and never jitter. The overlay says one thing at a time and gets out of the way. Full rules in docs/DESIGN.md.',
   `<div class="sg-row">${button({ label: 'Reduce motion: off', id: 'rm' })}</div>`,
 )
 
 $('#root').innerHTML =
-  `<div class="sg-top"><strong style="font-family:var(--gp-font-display);font-style:italic;font-weight:800;font-size:18px">GP</strong><span class="gp-muted">Design system</span><span class="gp-spacer"></span><nav>${[
+  `<div class="sg-top"><strong style="font-family:var(--gp-font-display);font-weight:600;font-size:18px">GP</strong><span class="gp-muted">Design system</span><span class="gp-spacer"></span><nav>${[
     'color',
     'type',
     'space',

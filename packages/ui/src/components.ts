@@ -106,7 +106,6 @@ export interface LapTimeOptions {
   ms: number | null | undefined
   kind?: TimingKind
   size?: 'sm' | 'md' | 'lg' | 'xl'
-  italic?: boolean
 }
 export function lapTime(o: LapTimeOptions): string {
   const empty = !o.ms || o.ms <= 0
@@ -116,7 +115,6 @@ export function lapTime(o: LapTimeOptions): string {
     'gp-laptime',
     kind && `gp-laptime--${kind}`,
     o.size && `gp-laptime--${o.size}`,
-    o.italic && 'gp-italic',
   )}">${formatLapTime(o.ms)}${label ? `<span class="gp-sr-only">${label}</span>` : ''}</span>`
 }
 

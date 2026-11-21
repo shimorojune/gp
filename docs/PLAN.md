@@ -620,8 +620,8 @@ Install by hand until then: open the dmg, drag GP to Applications, `xattr -cr /A
 `packages/ui` (`@gp/ui`): tokens (`src/tokens.ts` → `dist/gp-ui.css`), core components (buttons,
 tabs, cards, stats, lap time, delta, gap, sectors, status, fields, list/table, toast, PTT, empty
 and error states) and broadcast-style ones (driver strip, timing tower, radio card, banners) for
-the overlay. Direction: graphite + white + one red, structure borrowed from F1 TV graphics, Saira
-(OFL) as the swappable display face, Inter for body. Contrast and token-usage rules are tested.
+the overlay. Direction: graphite + white + one red, structure borrowed from F1 TV graphics, Archivo
+(OFL) as the swappable display face, kept calm (no italics, weights ≤600, red as thin lines only), Inter for body. Contrast and token-usage rules are tested.
 Rules and overlay layout: `docs/DESIGN.md`. Style guide: `pnpm --filter @gp/ui styleguide`.
 Next step (separate): move the dashboard, overlay and Notes tab onto it, then Garage/Review modes.
 
