@@ -119,12 +119,12 @@ importers:
 
   packages/ui:
     dependencies:
-      '@fontsource-variable/archivo':
-        specifier: 5.2.8
-        version: 5.2.8
       '@fontsource-variable/inter':
         specifier: 5.3.0
         version: 5.3.0
+      '@fontsource-variable/saira':
+        specifier: 5.2.8
+        version: 5.2.8
       '@gp/shared':
         specifier: workspace:*
         version: link:../shared
@@ -880,11 +880,11 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@fontsource-variable/archivo@5.2.8':
-    resolution: {integrity: sha512-R8EotpKHEsKv7d7oiUyjyPENRi2gtAlwdTlzDCOs5BfX/LJP7jvUYJ4fF/qyd3rnbgk3r1xp33g1P57bYJfhzQ==}
-
   '@fontsource-variable/inter@5.3.0':
     resolution: {integrity: sha512-OupL48va4JNofb97w6NYeF9S7W/kHNKM0Er8Dem5nqi4jeOLrVJDoE8tZEpnMJmtkvNbB1EIPPwHcdkF6b1oUA==}
+
+  '@fontsource-variable/saira@5.2.8':
+    resolution: {integrity: sha512-yCquVgYRoooj/Llmhmymvi0K1lgRXtC3KzriIiu2H+uwHsOifnvsqiikcxpp9tfQ3mhhSDZDPKj6XybjtU9Svg==}
 
   '@hono/node-server@2.1.6':
     resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
@@ -4143,9 +4143,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@fontsource-variable/archivo@5.2.8': {}
-
   '@fontsource-variable/inter@5.3.0': {}
+
+  '@fontsource-variable/saira@5.2.8': {}
 
   '@hono/node-server@2.1.6(hono@4.13.17)':
     dependencies:

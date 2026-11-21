@@ -156,7 +156,7 @@ export const overlay = {
   fontSizeHero: '64px',
   fontWeightBody: '600',
   fontWeightCall: '600',
-  fontWeightReadout: '600',
+  fontWeightReadout: '500',
   padding: '12px 16px',
   accentBar: '2px',
   /** Radio card stays up this long after GP stops talking (ms, JS). */
@@ -196,14 +196,17 @@ export const broadcast = {
 export const font = {
   /**
    * Display face for numbers, driver names, labels and the whole overlay. 'GP Display' is the
-   * bundled Archivo (OFL, variable weight and width). To use a licensed broadcast font, install
+   * bundled Saira (OFL, variable weight and width), set expanded: the closest free match to the
+   * broadcast face. To use a licensed broadcast font, install
    * it and put its family name first here, or define 'GP Skin Display' in the local skin
    * (docs/DESIGN.md, "Local skin"). It must have tabular figures or lap times will jitter.
    */
   display:
-    "'GP Skin Display', 'GP Display', 'Archivo Variable', Archivo, 'Inter Variable', -apple-system, sans-serif",
-  /** Width for names and labels in the display face: a little extended, like broadcast type. */
-  stretchWide: '112%',
+    "'GP Skin Display', 'GP Display', 'Saira Variable', Saira, 'Inter Variable', -apple-system, sans-serif",
+  /** Width for names and labels in the display face: fully expanded, like broadcast type. */
+  stretchWide: '125%',
+  /** Width for numbers: expanded but a touch narrower so long times still fit. */
+  stretchNum: '115%',
   /** Body text, forms, long notes. */
   sans: "'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif",
   mono: 'ui-monospace, SFMono-Regular, Menlo, monospace',

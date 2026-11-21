@@ -77,13 +77,15 @@ Token rules:
 
 ## Type
 
-- **Display face: `--gp-font-display`.** This is "GP Display", a bundled copy of **Archivo**
-  (OFL, variable weight and width, tabular figures).
-  - Use it for every number a driver compares, driver names, labels, tabs, and the whole overlay.
-  - Names and labels use a slightly extended width (`--gp-font-stretch-wide`, 112%), which gives
-    the broadcast feel without gimmicks.
-  - Numbers stay at normal width, weight 600, upright.
-  - Saira was tried first and dropped because it read as too techno/arcade.
+- **Display face: `--gp-font-display`.** This is "GP Display", a bundled copy of **Saira**
+  (OFL, variable weight and width, tabular figures), set expanded.
+  - It is the closest free match to the broadcast face, checked side by side against crops of
+    Rohit's F1 screenshots (`f1-font-match.png` in project files).
+  - Names and labels use 125% width (`--gp-font-stretch-wide`).
+  - Numbers use 115% width (`--gp-font-stretch-num`), and big numbers use weight 500.
+  - Type stays upright: the "arcadey" problem was the italic black weights, not the face.
+  - Archivo was tried in between and rejected as not looking like the F1 font.
+  - The real Formula1 font is licensed. It can be used via the local skin (`'GP Skin Display'`).
 - **Body face: `--gp-font-sans`.** This is **Inter**, bundled. Use it for body text, forms and
   long notes in Garage and Review.
 - **Both faces are bundled.** The woff2 files are copied into `dist/fonts`, latin and latin-ext

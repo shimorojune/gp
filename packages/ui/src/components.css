@@ -81,6 +81,7 @@
 .gp-ptt,
 .gp-overlay {
   font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch-num);
 }
 .gp-caps {
   text-transform: uppercase;

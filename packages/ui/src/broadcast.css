@@ -157,7 +157,7 @@
 .gp-strip-value {
   font-size: 28px;
   line-height: 1.05;
-  font-weight: var(--gp-font-weight-semibold);
+  font-weight: var(--gp-font-weight-medium);
   font-variant-numeric: tabular-nums;
   font-feature-settings: var(--gp-font-numeric-features);
   letter-spacing: var(--gp-tracking-tight);
@@ -326,7 +326,7 @@
 .gp-tower-live {
   padding: 0 var(--gp-space-3) var(--gp-space-2);
   font-size: 22px;
-  font-weight: var(--gp-font-weight-semibold);
+  font-weight: var(--gp-font-weight-medium);
   font-variant-numeric: tabular-nums;
   font-feature-settings: var(--gp-font-numeric-features);
 }
