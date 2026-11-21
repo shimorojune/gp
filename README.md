@@ -16,6 +16,12 @@ Applications, then (the app is not signed with an Apple Developer ID):
 xattr -cr /Applications/GP.app
 ```
 
+After that GP updates itself: when a new release is out it downloads and checks it while you're
+not driving, and the dashboard shows **Update to vX**. That restarts GP on the new version, and
+puts the old one back automatically if the new one doesn't start. The **Check** tab is the
+pre-flight list (keys, Claude login, ffmpeg, mic, DualSense, telemetry), and on first run it
+asks for the API keys.
+
 The app keeps everything in `~/Documents/GP/` (`.env` with API keys, `gp.db`, notes,
 recordings, `logs/gp.log`), so it doesn't need the repo. It uses your Claude Code login.
 ffmpeg (mic) and whisper-cli come from Homebrew.

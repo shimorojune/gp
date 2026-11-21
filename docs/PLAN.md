@@ -607,13 +607,24 @@ is mostly a practice/quali feature.
    + smoke-test the app and upload it as a workflow artifact, no release. commitlint runs in a
    husky `commit-msg` hook (installed by `pnpm install`). Version shows in the dashboard header
    and overlay title (`v1.2.0 (abc1234)`, or `dev …` from the repo).
-3. **Next: self-updater.** Stock electron-updater can't work unsigned (Squirrel.Mac needs a real
-   signature). Plan: check `releases/latest` on GitHub (repo is public, no token needed), download
-   `GP-<v>-arm64.zip`, verify sha256 from `gp-release.json`, `ditto -x -k`, `xattr -cr`, helper
-   script swaps `/Applications/GP.app` after quit with a backup and rollback if the new one fails
-   its first launch. Then a first-run setup screen and a pre-flight check.
+3. **Self-updater (built 2026-11-21, `main/updater.ts`, `main/update-helper.ts`).** Checks
+   GitHub `releases/latest` (public repo, no token) 30 s after start, then every 4 h, or from
+   the dashboard button. Downloads `GP-<v>-arm64.zip` to `~/Documents/GP/updates`, checks size +
+   sha256 from `gp-release.json`, `ditto -x -k`, `xattr -cr`, `codesign --verify`, checks the
+   bundle version, runs the new copy's `--smoke-test` beside the running GP. "Update to v<x>" in
+   the dashboard quits GP; a detached bash helper swaps the .app, keeps the old one as
+   `updates/GP-previous.app`, relaunches, and rolls back unless the new version writes
+   `updates/boot-ok` within 90 s (windows loaded + 8 s). A rolled-back version is skipped until
+   checked by hand. Never downloads or installs while telemetry is coming in (2 min quiet).
+   Log: `updates/update.log`. Branch CI runs `scripts/e2e-update.mjs`: builds two versions,
+   updates A→B, then forces a rollback. Caveat: ad-hoc signatures change every build, so macOS
+   may ask for microphone permission again after an update.
+4. **Pre-flight + first-run setup (built 2026-11-21, `main/preflight.ts`).** Check tab: data
+   folder, API keys, Claude login, ffmpeg, mic permission, DualSense, whisper fallback,
+   telemetry. Opens by itself on first run (no `.env`) or on a failed check; the setup form writes
+   the keys to `~/Documents/GP/.env` (mode 600) and offers a restart.
 
-Install by hand until then: open the dmg, drag GP to Applications, `xattr -cr /Applications/GP.app`.
+First install by hand: open the dmg, drag GP to Applications, `xattr -cr /Applications/GP.app`. After that the app updates itself.
 
 ### Design system — **built 2026-11-21**, not yet applied to the screens
 
