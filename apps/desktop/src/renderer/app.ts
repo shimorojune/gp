@@ -1,6 +1,6 @@
 import { RadioPlayer } from './audio.ts'
+import { chatPage } from './pages/chat.ts'
 import { debriefPage } from './pages/debrief.ts'
-import { chatInterim } from './pages/interim.ts'
 import { notesPage } from './pages/notes.ts'
 import { settingsPage } from './pages/settings.ts'
 import { statusPage } from './pages/status.ts'
@@ -35,7 +35,7 @@ const root = document.getElementById('root')!
 // for the packaged-app self-check straight away.
 const shell = mountShell(root, {
   debrief: debriefPage,
-  chat: chatInterim,
+  chat: chatPage,
   status: statusPage,
   notes: notesPage,
   settings: settingsPage,
