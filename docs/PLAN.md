@@ -93,7 +93,7 @@ gp/
 │   ├── callouts/           rule engine, priority queue, safe-to-talk gate, line templates
 │   ├── engineer/           Agent SDK session, persona prompt, MCP tools, memory
 │   ├── voice/              STT/TTS adapters, audio playback, radio effect
-│   ├── ui/                 design system: tokens, CSS, framework-free components (docs/DESIGN.md)
+│   ├── ui/                 design system: tokens, CSS, radio card (docs/DESIGN.md)
 │   └── input/              PTT sources: Swift DualSense helper + keyboard hook
 ├── tools/
 │   ├── replay/             CLI: play recorded sessions into the app at 1x–20x
@@ -626,14 +626,13 @@ is mostly a practice/quali feature.
 
 First install by hand: open the dmg, drag GP to Applications, `xattr -cr /Applications/GP.app`. After that the app updates itself.
 
-### Design system — **built 2026-11-21**, not yet applied to the screens
+### Design system — **base minimum built 2026-11-21**, not yet applied to the screens
 
-`packages/ui` (`@gp/ui`): tokens (`src/tokens.ts` → `dist/gp-ui.css`), core components (buttons,
-tabs, cards, stats, lap time, delta, gap, sectors, status, fields, list/table, toast, PTT, empty
-and error states) and broadcast-style ones (driver strip, timing tower, radio card, banners) for
-the overlay. Direction: graphite + white + one red, structure borrowed from F1 TV graphics, Saira Expanded
-(OFL) as the swappable display face, kept calm (no italics, weights ≤600, red as thin lines only), Inter for body. Contrast and token-usage rules are tested.
-Rules and overlay layout: `docs/DESIGN.md`. Style guide: `pnpm --filter @gp/ui styleguide`.
+`packages/ui` (`@gp/ui`): tokens (`src/tokens.ts` → `dist/gp-ui.css`: colour, team colours, type,
+space, radius, motion), the GP Display face (bundled Saira, OFL, expanded, swappable) plus Inter,
+and one component: the TV-style team-radio card. Contrast and token-usage rules are tested.
+Other components get added only when a screen needs them. Rules: `docs/DESIGN.md`. Style guide:
+`pnpm --filter @gp/ui styleguide`.
 Next step (separate): move the dashboard, overlay and Notes tab onto it, then Garage/Review modes.
 
 ### Later / maybe

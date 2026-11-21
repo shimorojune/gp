@@ -1,0 +1,48 @@
+/* GP base. Opt-in: nothing applies until markup uses a .gp-* class. */
+
+.gp-app {
+  margin: 0;
+  background: var(--gp-color-bg);
+  color: var(--gp-color-text);
+  font-family: var(--gp-font-sans);
+  font-size: var(--gp-type-body-size);
+  line-height: var(--gp-type-body-line);
+  -webkit-font-smoothing: antialiased;
+}
+.gp-app *,
+.gp-app *::before,
+.gp-app *::after {
+  box-sizing: border-box;
+}
+
+/* The broadcast face: always expanded, always tabular numbers. */
+.gp-display {
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: var(--gp-font-numeric);
+}
+.gp-label {
+  font-family: var(--gp-font-display);
+  font-stretch: var(--gp-font-stretch);
+  font-size: var(--gp-type-caption-size);
+  line-height: var(--gp-type-caption-line);
+  font-weight: var(--gp-font-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gp-color-text-muted);
+}
+
+:where(.gp-app) :focus-visible {
+  outline: 2px solid var(--gp-color-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gp-app *,
+  .gp-radio * {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+}

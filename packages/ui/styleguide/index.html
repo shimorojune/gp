@@ -7,49 +7,25 @@
     <title>GP design system</title>
     <link rel="stylesheet" href="gp-ui.css" />
     <style>
-      /* Style-guide page layout only. Not part of the system. */
-      body { padding: 0 0 80px; }
-      .sg-top { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; gap: 12px;
-        padding: 12px 32px; background: var(--gp-color-bg); border-bottom: 1px solid var(--gp-color-border); }
-      .sg-top nav { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
-      .sg-top nav a { color: var(--gp-color-text-muted); text-decoration: none; }
-      .sg-top nav a:hover { color: var(--gp-color-text); }
-      .sg-wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
-      .sg-sec { padding: 40px 0 8px; }
-      .sg-sec > h2 { margin: 0 0 4px; }
-      .sg-sec > p.lead { margin: 0 0 20px; color: var(--gp-color-text-muted); max-width: 72ch; }
-      .sg-h3 { margin: 24px 0 10px; }
-      .sg-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
-      .sg-row { display: flex; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
-      .sg-swatch { border: 1px solid var(--gp-color-border); border-radius: var(--gp-radius-md); overflow: hidden; background: var(--gp-color-surface); }
-      .sg-swatch .chip { height: 52px; display: flex; align-items: flex-end; justify-content: flex-end; padding: 4px 6px; font-size: 11px; font-weight: 600; }
+      /* Style-guide layout only. */
+      body { padding-bottom: 80px; }
+      .sg-top { display: flex; align-items: center; gap: 12px; padding: 14px 32px; border-bottom: 1px solid var(--gp-color-border); }
+      .sg-wrap { max-width: 1320px; margin: 0 auto; padding: 0 32px; }
+      .sg-sec { padding: 40px 0 0; }
+      .sg-h2 { margin: 0 0 6px; font-size: 22px; font-weight: 800; text-transform: uppercase; }
+      .sg-h3 { margin: 28px 0 12px; }
+      .lead { margin: 0 0 20px; color: var(--gp-color-text-muted); max-width: 80ch; }
+      .sg-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+      .sg-swatch { border: 1px solid var(--gp-color-border); border-radius: 6px; overflow: hidden; background: var(--gp-color-surface); }
+      .sg-swatch .chip { height: 44px; }
       .sg-swatch .meta { padding: 6px 8px; font-size: 11px; line-height: 15px; }
-      .sg-swatch code { font-family: var(--gp-font-mono); color: var(--gp-color-text-muted); font-size: 10.5px; }
-      .sg-spec { display: grid; grid-template-columns: 170px 1fr; gap: 6px 16px; align-items: baseline; }
-      .sg-spec code, .sg-code { font-family: var(--gp-font-mono); font-size: 11px; color: var(--gp-color-text-faint); }
-      .sg-box { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
-      .sg-demo { padding: 20px; border: 1px dashed var(--gp-color-border); border-radius: var(--gp-radius-lg); }
-      .sg-space { background: var(--gp-color-accent); height: 12px; border-radius: 1px; }
-      .sg-motion { width: 36px; height: 36px; border-radius: var(--gp-radius-md); background: var(--gp-color-text); }
-      .sg-track { position: relative; height: 36px; flex: 1; border-bottom: 1px solid var(--gp-color-border); }
-      .sg-track .sg-motion { position: absolute; left: 0; }
-      .sg-track.go .sg-motion { left: calc(100% - 36px); }
-      /* Fake game frame for the overlay mock: drawn with gradients, no real imagery. */
-      .sg-game { position: relative; aspect-ratio: 16 / 9; border-radius: var(--gp-radius-lg); overflow: hidden;
-        background:
-          linear-gradient(180deg, #d9dcd6 0%, #f3f2ea 34%, transparent 34%),
-          linear-gradient(180deg, #6f746c 34%, #4a4d48 60%, #2a2b29 100%); }
-      .sg-game::before { content: ''; position: absolute; left: 0; right: 0; top: 34%; height: 66%;
-        background:
-          linear-gradient(100deg, transparent 0 18%, #f4f4f0 18% 19.2%, transparent 19.2%),
-          linear-gradient(80deg, transparent 0 80.8%, #f4f4f0 80.8% 82%, transparent 82%),
-          repeating-linear-gradient(90deg, #c8201a 0 26px, #f4f4f0 26px 52px) 0 0 / 100% 10px no-repeat;
-        clip-path: polygon(38% 0, 62% 0, 100% 100%, 0 100%); }
-      .sg-game::after { content: ''; position: absolute; left: 22%; right: 22%; bottom: -6%; height: 34%;
-        background: radial-gradient(ellipse at 50% 100%, #1a1b1d 0 55%, #0e0f10 56% 64%, transparent 65%); }
-      .sg-ov { position: absolute; z-index: 2; }
-      .sg-game > :not(.sg-ov) { position: relative; z-index: 2; }
-      .sg-note { font-size: 12px; color: var(--gp-color-text-muted); margin-top: 10px; max-width: 80ch; }
+      .sg-swatch .meta span, .sg-swatch code { color: var(--gp-color-text-muted); font-family: var(--gp-font-mono); font-size: 10.5px; }
+      .sg-type { display: grid; grid-template-columns: 180px 1fr; gap: 14px 20px; align-items: center; }
+      .sg-type code { font-family: var(--gp-font-mono); font-size: 11px; color: var(--gp-color-text-faint); }
+      .sg-cards { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+      .sg-game { position: relative; aspect-ratio: 16 / 9; border-radius: 8px; overflow: hidden;
+        background: linear-gradient(180deg, #d9dcd6 0%, #f3f2ea 34%, #6f746c 34%, #4a4d48 60%, #2a2b29 100%); }
+      .sg-ov { position: absolute; right: 2.5%; top: 8%; }
     </style>
   </head>
   <body class="gp-app">
