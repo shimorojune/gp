@@ -66,7 +66,7 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
             ? 'warn'
             : 'fail',
       detail: !sec.configured
-        ? 'Not set up. Settings → Connections: add your Infisical machine identity.'
+        ? 'Not set up yet. GP needs it for every key. Settings → Connections.'
         : sec.source === 'infisical'
           ? `Connected to ${sec.config?.siteUrl ?? 'Infisical'} (${sec.config?.environment}${sec.config?.secretPath})${ago}`
           : sec.source === 'cache'
@@ -122,7 +122,7 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
     detail:
       dg && el
         ? `Deepgram and ElevenLabs keys loaded${sec?.source === 'infisical' || sec?.source === 'cache' ? ' from Infisical' : ` from ${envFile}`}`
-        : `${[!dg && 'Deepgram (speech to text, falls back to local whisper)', !el && 'ElevenLabs (GP’s voice, falls back to the Mac voice)'].filter(Boolean).join(' and ')} missing. Add below.`,
+        : `${[!dg && 'Deepgram (speech to text, falls back to local whisper)', !el && 'ElevenLabs (GP’s voice, falls back to the Mac voice)'].filter(Boolean).join(' and ')} missing. Add them to Infisical.`,
   })
 
   // Claude Code login: the keychain item (no secret is read) or the credentials file.
@@ -187,7 +187,7 @@ export async function preflight(d: PreflightDeps): Promise<PreflightCheck[]> {
     status: whisper ? 'ok' : dg ? 'warn' : 'fail',
     detail: whisper
       ? 'whisper-cli and the base.en model are there'
-      : `Needs \`brew install whisper-cpp\` and ${model}. ${dg ? 'Only used if Deepgram is down.' : 'Without Deepgram this is how GP hears you.'}`,
+      : `Needs \`brew install whisper-cpp\` and the base.en model. ${dg ? 'Only used if Deepgram is down.' : 'Without Deepgram this is how GP hears you.'}`,
   })
 
   const age = d.telemetryAgeMs()
