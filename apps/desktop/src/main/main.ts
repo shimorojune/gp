@@ -21,9 +21,11 @@ import {
   backfill,
   ingestRecording,
   listCareers,
+  listSessions,
   pruneRecordings,
   recentSessionsView,
   renameCareer,
+  sessionDetail,
   unassignedSeasons,
 } from '@gp/history'
 import {
@@ -53,6 +55,9 @@ import {
   IPC,
   type NotesData,
   type RecordingState,
+  type SessionDetail,
+  type SessionFilter,
+  type SessionListItem,
   type SnapshotMessage,
   type StatusInfo,
   type UpdateState,
@@ -60,6 +65,12 @@ import {
 import { preflight, saveKeys } from './preflight.ts'
 import { RadioCardWindow } from './radio-card.ts'
 import { SecretStore } from './secrets.ts'
+import {
+  Cached,
+  type ElevenLabsCredits,
+  defaultOutputDevice,
+  fetchElevenLabsCredits,
+} from './service-status.ts'
 import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
@@ -159,7 +170,26 @@ const engineer = new EngineerSession({
   ...(process.env.GP_MODEL ? { model: process.env.GP_MODEL } : {}),
   ...(process.env.GP_CHECK_MODEL ? { checkModel: process.env.GP_CHECK_MODEL } : {}),
 })
-const toChat = (e: ChatEvent) => chatWin?.webContents.send(IPC.chatEvent, e)
+const toChat = (e: ChatEvent) => {
+  chatWin?.webContents.send(IPC.chatEvent, e)
+  win?.webContents.send(IPC.chatEvent, e)
+}
+/** Last Claude answer, for the status view. */
+const claudeStat: { lastLatencyMs: number | null; lastError: string | null } = {
+  lastLatencyMs: null,
+  lastError: null,
+}
+const outputDevice = new Cached<string | null>(null, defaultOutputDevice, 30_000)
+const elevenCredits = new Cached<ElevenLabsCredits>(
+  { charactersLeft: null, characterLimit: null, resetsAt: null },
+  async () => {
+    const key = process.env.ELEVENLABS_API_KEY
+    return key
+      ? fetchElevenLabsCredits(key)
+      : { charactersLeft: null, characterLimit: null, resetsAt: null }
+  },
+  10 * 60_000,
+)
 const toAudio = (m: AudioMessage) => win?.webContents.send(IPC.audio, m)
 // GP_RADIO_CARD=0 turns the overlay radio card off.
 const radioCard =
@@ -448,6 +478,8 @@ app.whenReady().then(async () => {
   ipcMain.handle(IPC.chatAsk, async (_e, text: string) => {
     try {
       const r = await engineer.ask(text)
+      claudeStat.lastLatencyMs = r.firstTextMs
+      claudeStat.lastError = null
       toChat({
         type: 'reply',
         id: r.id,
@@ -458,6 +490,7 @@ app.whenReady().then(async () => {
         tools: r.toolCalls.map((t) => t.replace('mcp__race__', '')),
       })
     } catch (err) {
+      claudeStat.lastError = err instanceof Error ? err.message : String(err)
       toChat({ type: 'error', message: err instanceof Error ? err.message : String(err) })
     }
   })
@@ -507,6 +540,12 @@ app.whenReady().then(async () => {
     }
   }
   ipcMain.handle(IPC.careers, () => careersInfo())
+  ipcMain.handle(IPC.sessions, (_e, f?: SessionFilter): SessionListItem[] =>
+    listSessions(history, f ?? {}, sync?.pendingUids()),
+  )
+  ipcMain.handle(IPC.sessionDetail, (_e, uid: string): SessionDetail | null =>
+    sessionDetail(history, uid, sync?.pendingUids()),
+  )
   ipcMain.handle(
     IPC.careerAssign,
     (_e, link: number, to: { careerId: string } | { newCareer: string }) =>
@@ -552,6 +591,8 @@ app.whenReady().then(async () => {
     }`,
   )
   startSync()
+  outputDevice.start()
+  elevenCredits.start()
   ipcMain.handle(IPC.secretsStatus, () => secrets.status())
   ipcMain.handle(IPC.secretsSave, async (_e, cfg) => {
     try {
@@ -561,6 +602,7 @@ app.whenReady().then(async () => {
     }
     const st = await secrets.refresh()
     startSync()
+    void elevenCredits.refresh()
     return st
   })
   ipcMain.handle(IPC.status, (): StatusInfo => {
@@ -591,6 +633,17 @@ app.whenReady().then(async () => {
         pushToTalk: v.pushToTalk,
       },
       voice: { stt: v.stt, sttFallbackReady: v.sttFallbackReady, tts: v.tts, speaking: v.speaking },
+      micLevel: v.micLevel,
+      outputDevice: outputDevice.value,
+      claude: {
+        ...claudeStat,
+        auth: process.env.CLAUDE_CODE_OAUTH_TOKEN
+          ? 'setup token'
+          : process.env.ANTHROPIC_API_KEY
+            ? 'api key'
+            : 'claude code login',
+      },
+      elevenLabs: elevenCredits.value,
       secrets: secrets.status(),
       database: { configured: !!sync, ...(sync?.localStatus() ?? emptySync) },
     }

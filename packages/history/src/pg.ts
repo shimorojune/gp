@@ -422,6 +422,11 @@ export class HistorySync {
     }
   }
 
+  /** Uids of local sessions not in Postgres yet (or changed since), for "Not synced" flags. */
+  pendingUids(): Set<string> {
+    return new Set(this.pendingLocal().map((p) => p.uid))
+  }
+
   private pendingLocal(): { uid: string; started_at: string; hash: string }[] {
     const rows = this.local.db
       .prepare(

@@ -105,6 +105,7 @@ export class RadioVoice {
       sttFallbackReady: this.fallbackStt.available,
       tts: this.tts?.name ?? 'mac voice',
       micRunning: this.mic.running,
+      micLevel: this.mic.running ? this.mic.level : null,
       controller: this.controller,
       pushToTalk: this.ptt.button,
       speaking: this.answering !== null,

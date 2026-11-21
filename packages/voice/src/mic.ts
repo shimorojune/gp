@@ -70,7 +70,25 @@ export class Mic extends TypedEmitter<MicEvents> {
     })
   }
 
+  private lvl = 0
+
+  /** Input level 0..1 (RMS of the latest audio, smoothed), for the status view's meter. */
+  get level(): number {
+    return this.proc ? this.lvl : 0
+  }
+
   private ingest(chunk: Buffer): void {
+    let sum = 0
+    const n = chunk.length >> 1
+    for (let i = 0; i < n; i++) {
+      const v = chunk.readInt16LE(i * 2) / 32768
+      sum += v * v
+    }
+    if (n > 0) {
+      const rms = Math.min(1, Math.sqrt(sum / n) * 4)
+      // Fast attack, slow release, like a VU meter.
+      this.lvl = rms > this.lvl ? rms : this.lvl * 0.8 + rms * 0.2
+    }
     if (this.take) {
       this.take.push(chunk)
       this.onChunk?.(chunk)

@@ -32,6 +32,8 @@ export const IPC = {
   careers: 'gp:careers',
   careerAssign: 'gp:career-assign',
   careerRename: 'gp:career-rename',
+  sessions: 'gp:sessions',
+  sessionDetail: 'gp:session-detail',
 } as const
 
 export interface NoteItem {
@@ -179,6 +181,18 @@ export interface StatusInfo {
   mic: { permission: string; running: boolean }
   controller: { connected: boolean; transport: 'usb' | 'bluetooth' | null; pushToTalk: string }
   voice: { stt: string; sttFallbackReady: boolean; tts: string; speaking: boolean }
+  /** Mic input level 0..1 (RMS, smoothed) while the mic runs; null when it's off. */
+  micLevel: number | null
+  /** Where GP's voice plays (the system default output device's name), null if unknown. */
+  outputDevice: string | null
+  /** Claude: last answer's time to first text, and whether the last call failed. */
+  claude: { lastLatencyMs: number | null; lastError: string | null; auth: string }
+  /** ElevenLabs characters left this billing period, null until fetched or when not used. */
+  elevenLabs: {
+    charactersLeft: number | null
+    characterLimit: number | null
+    resetsAt: string | null
+  }
   secrets: SecretsStatusInfo
   /** Postgres sync. configured: DATABASE_URL is set and sync is running. */
   database: DatabaseInfo
@@ -270,6 +284,138 @@ export interface GpBridge {
     to: { careerId: string } | { newCareer: string },
   ): Promise<CareersInfo | { error: string }>
   renameCareer(id: string, name: string): Promise<CareersInfo | { error: string }>
+  /** The debrief library, newest first. */
+  sessions(filter?: SessionFilter): Promise<SessionListItem[]>
+  /** Everything the debrief pane shows for one session, by the game's session uid. */
+  sessionDetail(uid: string): Promise<SessionDetail | null>
+  /**
+   * Ask GP anything over the whole history (same engineer and tools as the chat overlay).
+   * The answer streams back as ChatEvents ('delta' then 'reply') through onChat.
+   */
+  ask(text: string): Promise<void>
+  onChat(cb: (e: ChatEvent) => void): void
+}
+
+export type Program = 'career' | 'time_trial' | 'sim'
+export type SessionStatus = 'finished' | 'restarted' | 'abandoned'
+
+export interface SessionFilter {
+  program?: Program
+  careerId?: string
+  /** Career season (game season link). */
+  seasonLink?: number
+  /** Time trial: the car as stored (SessionListItem.car). */
+  car?: string
+  trackId?: number
+  /** Include restarted and abandoned attempts (shown greyed). Default true. */
+  includeAttempts?: boolean
+  /** Default 200. */
+  limit?: number
+  /** ISO; sessions started before this, for paging. */
+  before?: string
+}
+
+export interface SessionListItem {
+  uid: string
+  startedAt: string
+  durationS: number
+  program: Program
+  /** The game's mode name, e.g. "Grand Prix", "Time Trial", "Career". */
+  mode: string
+  /** Practice 1, Qualifying 1, Race, Time Trial... */
+  sessionType: string
+  trackId: number
+  track: string
+  team: string | null
+  car: string | null
+  formula: string | null
+  career: { id: string; name: string; season: number | null } | null
+  /** Career seasons not yet filed under a career. */
+  seasonLink: number | null
+  weekendLink: number | null
+  status: SessionStatus
+  /** The attempt that replaced this one (status 'restarted'). */
+  replacedBy: string | null
+  lapsDone: number
+  validLaps: number
+  bestLapMs: number | null
+  finishPos: number | null
+  gridPos: number | null
+  numCars: number | null
+  points: number | null
+  flashbacks: number
+  /** GP's debrief has been written. */
+  hasDebrief: boolean
+  /** Not in Postgres yet (or changed since the last push). */
+  pendingSync: boolean
+}
+
+export interface SessionDetail extends SessionListItem {
+  weather: string | null
+  trackTempC: number | null
+  airTempC: number | null
+  totalLaps: number | null
+  aiDifficulty: number | null
+  bestSectorsMs: [number | null, number | null, number | null]
+  idealLapMs: number | null
+  medianLapMs: number | null
+  consistencyMs: number | null
+  fieldBestMs: number | null
+  pitStops: number | null
+  penaltiesS: number | null
+  resultStatus: string | null
+  teammate: {
+    name: string
+    bestMs: number | null
+    pos: number | null
+    points: number | null
+  } | null
+  laps: {
+    lap: number
+    lapMs: number
+    sectorsMs: [number | null, number | null, number | null]
+    valid: boolean
+    tyre: string | null
+    tyreAge: number | null
+    fuelKg: number | null
+    wearPct: number | null
+    position: number | null
+    /** A flashback was used on this lap. */
+    flashback: boolean
+    /** Setup changed from the session's start setup on this lap (index into setups). */
+    setup: number | null
+  }[]
+  /** Runs on one tyre set: lap range, compound, pace and wear. */
+  stints: {
+    fromLap: number
+    toLap: number
+    tyre: string | null
+    laps: number
+    avgLapMs: number | null
+    wearPerLapPct: number | null
+  }[]
+  incidents: {
+    lap: number | null
+    kind: string
+    detail: string | null
+    sessionTime: number | null
+    /** A flashback took it back: show struck through, left out of stats. */
+    undone: boolean
+  }[]
+  classification: {
+    position: number
+    name: string
+    team: string | null
+    isPlayer: boolean
+    grid: number | null
+    points: number | null
+    bestLapMs: number | null
+    status: string | null
+  }[]
+  /** GP's debrief, as he wrote it. */
+  debrief: string | null
+  /** Setups used (session start first), as name -> value maps. */
+  setups: { key: string; values: Record<string, number> }[]
 }
 
 export interface CareersInfo {

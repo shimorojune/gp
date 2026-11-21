@@ -40,6 +40,12 @@ const bridge: GpBridge = {
   careers: () => ipcRenderer.invoke(IPC.careers),
   assignSeason: (seasonLink, to) => ipcRenderer.invoke(IPC.careerAssign, seasonLink, to),
   renameCareer: (id, name) => ipcRenderer.invoke(IPC.careerRename, id, name),
+  sessions: (filter) => ipcRenderer.invoke(IPC.sessions, filter),
+  sessionDetail: (uid) => ipcRenderer.invoke(IPC.sessionDetail, uid),
+  ask: (text) => ipcRenderer.invoke(IPC.chatAsk, text),
+  onChat: (cb) => {
+    ipcRenderer.on(IPC.chatEvent, (_e, ev: ChatEvent) => cb(ev))
+  },
   relaunch: () => ipcRenderer.send(IPC.relaunch),
   radioLevel: (level) => ipcRenderer.send(IPC.radioLevel, level),
   skinCss: () => ipcRenderer.invoke(IPC.skinCss),
