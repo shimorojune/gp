@@ -131,7 +131,6 @@ function needs(st: StatusInfo): { bad: boolean; warn: boolean } {
   const bad = (sec.configured && sec.source === 'none') || !!st.database.error
   const warn =
     !sec.configured ||
-    sec.source === 'cache' ||
     !st.controller.connected ||
     (st.database.configured &&
       st.database.pending > 0 &&
@@ -153,8 +152,6 @@ function statusLine({ snapshot, status }: AppState): string {
     return `<span class="gp-dot gp-dot--live gp-dot--pulse"></span><b>On track</b> · ${bits.join(' · ')} · radio live`
   }
   const sec = status?.secrets
-  if (sec?.configured && sec.source === 'cache')
-    return '<span class="gp-dot gp-dot--warn"></span>Offline · radio works on cached secrets'
   if (sec?.configured && sec.source === 'none')
     return '<span class="gp-dot gp-dot--bad"></span>No secrets · fix Infisical in Settings'
   return '<span class="gp-dot"></span>Waiting for F1 23 · radio ready'
@@ -189,18 +186,11 @@ function bannerList({ update, status }: AppState, show: (id: string) => boolean)
       '<button class="gp-button gp-button--sm gp-button--ghost" data-act="dismiss:updated">Dismiss</button>',
     )
   const sec = status?.secrets
-  if (sec?.configured && sec.source === 'cache')
-    b(
-      'offline',
-      'gp-dot--warn',
-      `<b>Can't reach Infisical.</b> The radio runs on cached secrets${sec.fetchedAt ? ` from ${esc(new Date(sec.fetchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }))}` : ''}. ${esc(sec.error ?? '')}`,
-      '<button class="gp-button gp-button--sm" data-act="go:status">Status</button>',
-    )
   if (sec?.configured && sec.source === 'none')
     b(
       'secrets',
       'gp-dot--bad',
-      `<b>Infisical refused GP's credentials.</b> ${esc(sec.error ?? '')}`,
+      `<b>GP has no secrets.</b> Infisical didn't answer, and it is the only place GP takes them from. ${esc(sec.error ?? '')}`,
       '<button class="gp-button gp-button--sm" data-act="go:settings" data-arg="connections">Open Connections</button>',
     )
   if (status?.database.configured && status.database.error)

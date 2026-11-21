@@ -31,7 +31,6 @@ const bridge: GpBridge = {
   checkUpdate: () => ipcRenderer.invoke(IPC.updateCheck),
   installUpdate: () => ipcRenderer.invoke(IPC.updateInstall),
   preflight: () => ipcRenderer.invoke(IPC.preflight),
-  saveKeys: (keys) => ipcRenderer.invoke(IPC.saveKeys, keys),
   secretsStatus: () => ipcRenderer.invoke(IPC.secretsStatus),
   saveSecrets: (cfg) => ipcRenderer.invoke(IPC.secretsSave, cfg),
   testSecrets: (cfg) => ipcRenderer.invoke(IPC.secretsTest, cfg),

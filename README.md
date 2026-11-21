@@ -22,8 +22,10 @@ puts the old one back automatically if the new one doesn't start. The **Check** 
 pre-flight list (keys, Claude login, ffmpeg, mic, DualSense, telemetry), and on first run it
 asks for the API keys.
 
-The app keeps everything in `~/Documents/GP/` (`.env` with API keys, `gp.db`, notes,
-recordings, `logs/gp.log`), so it doesn't need the repo. It uses your Claude Code login.
+The app keeps everything in `~/Documents/GP/` (`gp.db`, notes, recordings, `logs/gp.log`), so
+it doesn't need the repo. Every secret (Postgres URL, Claude setup token, ElevenLabs and Deepgram
+keys) comes from Infisical and nowhere else: keys in the shell or in `.env` are ignored, and
+nothing fetched is kept on disk. `.env` is only for `GP_*` settings.
 ffmpeg (mic) and whisper-cli come from Homebrew.
 
 ## Releases

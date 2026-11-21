@@ -2,11 +2,12 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path'
 
 /**
- * Secrets come from Infisical (docs: infisical.com/docs, Universal Auth machine identity).
- * The Mac keeps only how to reach Infisical, plus the last secrets it fetched so GP still
- * talks in a race when Infisical is unreachable. Both files are encrypted with the macOS
- * Keychain (Electron safeStorage), never plain text. ~/Documents/GP/.env still loads first
- * as a testing override; whatever Infisical returns wins.
+ * Secrets come from Infisical and nowhere else (docs: infisical.com/docs, Universal Auth
+ * machine identity). There is no fallback: a key in the shell environment or in
+ * ~/Documents/GP/.env is removed before anything can read it, nothing fetched is kept on disk,
+ * and when Infisical can't be reached or doesn't hold a secret, that secret is missing.
+ * The Mac keeps only how to reach Infisical, encrypted with the macOS Keychain (Electron
+ * safeStorage), never plain text.
  */
 
 /** What GP expects to find in Infisical. Shown as found or missing, never their values. */
@@ -16,6 +17,13 @@ export const EXPECTED_SECRETS = [
   'ELEVENLABS_API_KEY',
   'DEEPGRAM_API_KEY',
 ] as const
+
+/**
+ * Credentials that may only come from Infisical. Anything under these names from another source
+ * (shell, .env) is deleted from the environment. ANTHROPIC_API_KEY is not one GP uses, but the
+ * Claude process would pick it up, so it is removed too.
+ */
+export const SECRET_NAMES: readonly string[] = [...EXPECTED_SECRETS, 'ANTHROPIC_API_KEY']
 
 /** Only these names are copied into the environment: the expected ones and GP_* settings. */
 export const secretAllowed = (name: string) =>
@@ -38,11 +46,12 @@ export type PublicInfisicalConfig = Omit<InfisicalConfig, 'clientSecret'> & { ha
 export interface SecretsStatus {
   configured: boolean
   /** Where the secrets in use came from this run. */
-  source: 'infisical' | 'cache' | 'none'
-  /** When they were fetched from Infisical (ISO), for 'infisical' and 'cache'. */
+  source: 'infisical' | 'none'
+  /** When they were fetched from Infisical (ISO). Null unless the last fetch worked. */
   fetchedAt: string | null
   /** The last fetch's error, if it failed. */
   error: string | null
+  /** Expected secret name -> Infisical returned it in the last fetch. */
   found: Record<string, boolean>
   config: PublicInfisicalConfig | null
 }
@@ -117,6 +126,16 @@ export async function fetchInfisical(
   return out
 }
 
+/** Remove every credential name from the environment. Returns the names that were there. */
+export function scrubSecrets(env: NodeJS.ProcessEnv = process.env): string[] {
+  const gone: string[] = []
+  for (const k of SECRET_NAMES) {
+    if (env[k] !== undefined) gone.push(k)
+    delete env[k]
+  }
+  return gone
+}
+
 /** Copy allowed secrets into the environment. Returns the names set. */
 export function applySecrets(values: Record<string, string>, env: NodeJS.ProcessEnv = process.env) {
   const set: string[] = []
@@ -130,8 +149,11 @@ export function applySecrets(values: Record<string, string>, env: NodeJS.Process
 
 export class SecretStore {
   private readonly configFile: string
-  private readonly cacheFile: string
   private state: SecretsStatus
+  /** Expected secrets Infisical returned in the last fetch that worked. */
+  private fetched = new Set<string>()
+  /** Credential names found in the shell or .env at start and thrown away (names only). */
+  readonly ignored: string[]
 
   constructor(
     dir: string,
@@ -140,8 +162,10 @@ export class SecretStore {
     private readonly env: NodeJS.ProcessEnv = process.env,
   ) {
     this.configFile = join(dir, 'infisical.enc')
-    this.cacheFile = join(dir, 'secrets-cache.enc')
     mkdirSync(dir, { recursive: true })
+    this.ignored = scrubSecrets(this.env)
+    // Earlier versions kept the last fetched secrets here. Nothing fetched stays on disk now.
+    rmSync(join(dir, 'secrets-cache.enc'), { force: true })
     this.state = this.blank()
   }
 
@@ -158,7 +182,7 @@ export class SecretStore {
   }
 
   private found(): Record<string, boolean> {
-    return Object.fromEntries(EXPECTED_SECRETS.map((k) => [k, !!this.env[k]]))
+    return Object.fromEntries(EXPECTED_SECRETS.map((k) => [k, this.fetched.has(k)]))
   }
 
   private read<T>(file: string): T | null {
@@ -205,10 +229,10 @@ export class SecretStore {
     this.write(this.configFile, cfg)
   }
 
-  /** Forget the connection and the cached secrets. */
+  /** Forget the connection and every secret in use. */
   clear(): void {
     rmSync(this.configFile, { force: true })
-    rmSync(this.cacheFile, { force: true })
+    this.drop()
     this.state = this.blank()
   }
 
@@ -234,34 +258,33 @@ export class SecretStore {
     }
   }
 
+  /** No secret is in use any more: none in the environment, none shown as found. */
+  private drop(): void {
+    scrubSecrets(this.env)
+    this.fetched.clear()
+  }
+
   /**
-   * Fetch from Infisical and put the secrets in the environment. On failure, use the last
-   * secrets fetched (encrypted on disk). Never throws.
+   * Fetch from Infisical and put the secrets in the environment. The environment then holds
+   * exactly what this fetch returned: if it fails, or a secret is gone from Infisical, the
+   * secret is removed. Never throws.
    */
   async refresh(): Promise<SecretsStatus> {
     const cfg = this.loadConfig()
     if (!cfg) {
+      this.drop()
       this.state = this.blank()
       return this.status()
     }
     try {
       const values = await fetchInfisical(cfg, this.fetchImpl)
-      const fetchedAt = new Date().toISOString()
-      applySecrets(values, this.env)
-      try {
-        this.write(this.cacheFile, { fetchedAt, values })
-      } catch {}
-      this.state = { ...this.blank(), source: 'infisical', fetchedAt }
+      this.drop()
+      const set = applySecrets(values, this.env)
+      for (const k of EXPECTED_SECRETS) if (set.includes(k)) this.fetched.add(k)
+      this.state = { ...this.blank(), source: 'infisical', fetchedAt: new Date().toISOString() }
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e)
-      const cache = this.read<{ fetchedAt: string; values: Record<string, string> }>(this.cacheFile)
-      if (cache) applySecrets(cache.values, this.env)
-      this.state = {
-        ...this.blank(),
-        source: cache ? 'cache' : 'none',
-        fetchedAt: cache?.fetchedAt ?? null,
-        error,
-      }
+      this.drop()
+      this.state = { ...this.blank(), error: e instanceof Error ? e.message : String(e) }
     }
     return this.status()
   }

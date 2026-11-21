@@ -215,7 +215,7 @@ async function firstRun(root: HTMLElement): Promise<void> {
           get().status?.secrets ??
           null
         const n = sec ? SECRETS.filter(([k]) => sec.found[k]).length : 0
-        page.innerHTML = `<div><h1 class="title">Secrets ${n === SECRETS.length ? 'found' : `found: ${n} of ${SECRETS.length}`}</h1><p class="muted">Read from Infisical. Values are never shown.${n < SECRETS.length ? ' Add the missing ones in Infisical; GP falls back to local speech and the Mac voice without the voice keys.' : ''}</p></div><div class="gp-panel">${secretRows(sec?.found ?? null)}</div>${nav(true)}`
+        page.innerHTML = `<div><h1 class="title">Secrets ${n === SECRETS.length ? 'found' : `found: ${n} of ${SECRETS.length}`}</h1><p class="muted">${sec?.source === 'infisical' ? 'Read from Infisical just now. Values are never shown.' : `GP couldn't read Infisical, so nothing is found. ${esc(sec?.error ?? '')}`}${sec?.source === 'infisical' && n < SECRETS.length ? ' Infisical is the only place GP takes secrets from. Add the missing ones there.' : ''}</p></div><div class="gp-panel">${secretRows(sec?.found ?? null)}</div>${nav(true)}`
         $('[data-next]', page).addEventListener('click', () => void go(3))
         wire()
       } else if (i === 3) {

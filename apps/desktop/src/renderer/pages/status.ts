@@ -86,14 +86,13 @@ function row(id: string, s: StatusInfo, r: PreflightResult | null): CheckRow {
     case 'claude':
       return {
         ...base,
-        state: s.claude.lastError ? 'fail' : 'ok',
-        detail: s.claude.lastError
-          ? `Last call failed: ${s.claude.lastError}`
-          : s.claude.auth === 'setup token'
-            ? 'Setup token works · Max plan'
-            : s.claude.auth === 'api key'
-              ? 'Using ANTHROPIC_API_KEY, billed per call'
-              : 'Using your Claude Code login',
+        state: s.claude.auth === 'none' || s.claude.lastError ? 'fail' : 'ok',
+        detail:
+          s.claude.auth === 'none'
+            ? 'Off. CLAUDE_CODE_OAUTH_TOKEN is missing from Infisical.'
+            : s.claude.lastError
+              ? `Last call failed: ${s.claude.lastError}`
+              : 'Setup token from Infisical · Max plan',
         meta:
           s.claude.lastLatencyMs != null
             ? `last call ${(s.claude.lastLatencyMs / 1000).toFixed(1)} s`
@@ -129,13 +128,7 @@ function row(id: string, s: StatusInfo, r: PreflightResult | null): CheckRow {
     case 'infisical': {
       const sec = s.secrets
       const l = connectionLine(sec)
-      const st = !sec.configured
-        ? 'warn'
-        : sec.source === 'infisical'
-          ? 'ok'
-          : sec.source === 'cache'
-            ? 'warn'
-            : 'fail'
+      const st = !sec.configured ? 'warn' : sec.source === 'infisical' ? 'ok' : 'fail'
       const where = sec.config ? ` · ${sec.config.environment} · ${sec.config.secretPath}` : ''
       return {
         ...base,
@@ -145,11 +138,7 @@ function row(id: string, s: StatusInfo, r: PreflightResult | null): CheckRow {
           : sec.source === 'infisical'
             ? `Connected${where}`
             : `${l.text}${sec.error ? `. ${sec.error}` : ''}`,
-        meta: sec.fetchedAt
-          ? sec.source === 'cache'
-            ? 'cached'
-            : `fetched ${when(sec.fetchedAt)}`
-          : '',
+        meta: sec.fetchedAt ? `fetched ${when(sec.fetchedAt)}` : '',
       }
     }
     case 'secrets': {
@@ -161,7 +150,7 @@ function row(id: string, s: StatusInfo, r: PreflightResult | null): CheckRow {
         detail:
           n === SECRETS.length
             ? `All ${n} found`
-            : `${n} of ${SECRETS.length}. Missing ${missing.join(', ')}`,
+            : `${n} of ${SECRETS.length} in Infisical. Missing ${missing.join(', ')}`,
       }
     }
     case 'postgres': {

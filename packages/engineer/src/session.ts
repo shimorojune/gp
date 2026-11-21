@@ -42,6 +42,12 @@ export interface EngineerOptions {
   cwd?: string
   /** Extra Options passed through to the SDK (tests, debugging). */
   sdk?: Partial<Options>
+  /**
+   * Why the engineer may not run right now, or null when he may. While it returns a reason no
+   * Claude process is started and every ask() or notify() is refused with it. The app uses this
+   * so Claude only ever runs on the token from Infisical, never on another login on the Mac.
+   */
+  blocked?: () => string | null
 }
 
 /** 'ask' = the driver said something. 'event' = an automatic check from the car's systems. */
@@ -108,8 +114,8 @@ export function statusTag(s: RaceSnapshot): string {
 /**
  * One long-lived Claude conversation for the engineer. Uses the Agent SDK's streaming input
  * mode so the Claude Code process stays warm: Phase 0 measured 3-5s of process start/stop
- * per query() otherwise. Auth comes from the local Claude Code login (Rohit's subscription);
- * this code never touches credentials.
+ * per query() otherwise. Auth is whatever the environment holds (the app puts the setup token
+ * from Infisical there, and blocks the session without it); this code never touches credentials.
  */
 export class EngineerSession extends TypedEmitter<EngineerEvents> {
   private input = new AsyncQueue<SDKUserMessage>()
@@ -128,7 +134,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
   }
 
   start(): void {
-    if (this.q) return
+    if (this.q || this.opts.blocked?.()) return
     const { server, toolNames } = createRaceTools({
       snapshot: this.opts.snapshot,
       notes: this.opts.notes,
@@ -203,6 +209,8 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
   }
 
   private send(text: string, model: string, kind: TurnKind): Promise<Reply> {
+    const why = this.opts.blocked?.()
+    if (why) return Promise.reject(new Error(why))
     this.start()
     let content = text
     if (this.context.length) {

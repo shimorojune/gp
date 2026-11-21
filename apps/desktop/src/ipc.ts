@@ -18,7 +18,6 @@ export const IPC = {
   updateCheck: 'gp:update-check',
   updateInstall: 'gp:update-install',
   preflight: 'gp:preflight',
-  saveKeys: 'gp:save-keys',
   relaunch: 'gp:relaunch',
   radioCard: 'gp:radio-card',
   radioDone: 'gp:radio-done',
@@ -141,7 +140,7 @@ export interface PreflightCheck {
 
 export interface PreflightResult {
   checks: PreflightCheck[]
-  /** No ~/Documents/GP/.env yet: show the setup form. */
+  /** Infisical isn't connected yet. */
   firstRun: boolean
 }
 
@@ -158,10 +157,11 @@ export interface InfisicalInput {
 
 export interface SecretsStatusInfo {
   configured: boolean
-  source: 'infisical' | 'cache' | 'none'
+  /** 'infisical' when the last fetch worked. There is no other source. */
+  source: 'infisical' | 'none'
   fetchedAt: string | null
   error: string | null
-  /** Expected secret name -> present in the environment. Never the values. */
+  /** Expected secret name -> Infisical returned it in the last fetch. Never the values. */
   found: Record<string, boolean>
   config: (Omit<InfisicalInput, 'clientSecret'> & { hasSecret: boolean }) | null
 }
@@ -192,7 +192,8 @@ export interface StatusInfo {
   /** Where GP's voice plays (the system default output device's name), null if unknown. */
   outputDevice: string | null
   /** Claude: last answer's time to first text, and whether the last call failed. */
-  claude: { lastLatencyMs: number | null; lastError: string | null; auth: string }
+  /** auth 'none': no setup token from Infisical, the engineer is off. */
+  claude: { lastLatencyMs: number | null; lastError: string | null; auth: 'setup token' | 'none' }
   /** ElevenLabs characters left this billing period, null until fetched or when not used. */
   elevenLabs: {
     charactersLeft: number | null
@@ -213,11 +214,6 @@ export interface DatabaseInfo {
   pushed: number
   pulled: number
   error: string | null
-}
-
-export interface SetupKeys {
-  deepgram?: string
-  elevenlabs?: string
 }
 
 /** The self-updater (main/updater.ts). */
@@ -269,8 +265,7 @@ export interface GpBridge {
   /** Quits and installs; resolves with a reason when it can't. */
   installUpdate(): Promise<string | null>
   preflight(): Promise<PreflightResult>
-  /** Writes ~/Documents/GP/.env; GP needs a restart to use the keys. */
-  saveKeys(keys: SetupKeys): Promise<{ file: string } | { error: string }>
+  /** Restarts the app. */
   relaunch(): void
   /** GP's voice level while it plays, for the radio card's waveform. */
   radioLevel(level: number): void
