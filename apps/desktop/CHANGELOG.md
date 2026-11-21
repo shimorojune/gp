@@ -1,5 +1,12 @@
 # GP changelog
 
+## [0.3.0](https://github.com/shimorojune/gp/compare/v0.2.1...v0.3.0) (2026-11-21)
+
+### Features
+
+* **desktop:** pre-flight check and first-run setup ([c5bafb0](https://github.com/shimorojune/gp/commit/c5bafb037181ed9182c438208d2c213ff7da03c7))
+* **desktop:** self-updater from GitHub Releases ([1bedd42](https://github.com/shimorojune/gp/commit/1bedd426de1b04136b8486a09dc145f5a1097629))
+
 ## [0.2.1](https://github.com/shimorojune/gp/compare/v0.2.0...v0.2.1) (2026-11-21)
 
 ### Bug Fixes
