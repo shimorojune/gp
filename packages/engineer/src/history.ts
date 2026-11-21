@@ -5,6 +5,7 @@ import {
   type LiveSession,
   type Program,
   careerBrief,
+  careerOfSeason,
   careerView,
   cornerReport,
   expectedRange,
@@ -16,6 +17,8 @@ import {
   sessionDetailView,
   setupHistory,
   setupTrial,
+  timeAway,
+  timeAwayBrief,
   trackBrief,
   trackRecall,
 } from '@gp/history'
@@ -245,9 +248,12 @@ export function attachHistory(
       const career = CAREER_GAME_MODES.has(s.gameMode)
       const brief = trackBrief(history, s.trackId)
       const season = career ? careerBrief(history, s.seasonLink) : null
+      const filed = career ? careerOfSeason(history, s.seasonLink) : null
+      const now = new Date()
       addContext(
         [
-          `New session: ${s.track} ${s.sessionType} (${career ? 'career' : 'sim time'}).`,
+          timeAwayBrief(timeAway(history, now, s.uid), now),
+          `New session: ${s.track} ${s.sessionType} (${career ? `career${filed ? `, ${filed.name} season ${filed.season}` : ''}` : 'sim time'}).`,
           brief ?? `First time at ${s.track} as far as the history goes.`,
           season,
         ]

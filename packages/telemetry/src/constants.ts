@@ -315,3 +315,15 @@ export const GAME_MODES: Record<number, string> = {
 
 /** Career seasons count as the real thing; everything else is simulator time. */
 export const CAREER_GAME_MODES: ReadonlySet<number> = new Set([19, 20, 21, 22])
+
+/** Session packet `formula`: the series the car belongs to (F1 23). */
+export const FORMULAS: Record<number, string> = {
+  0: 'F1',
+  1: 'F1 Classic',
+  2: 'F2',
+  3: 'F1 Generic',
+  4: 'Beta',
+  5: 'Supercars',
+  6: 'Esports',
+  7: 'F2 2021',
+}

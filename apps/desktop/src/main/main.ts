@@ -17,10 +17,14 @@ import {
   HistorySync,
   PgStore,
   SessionCollector,
+  assignSeason,
   backfill,
   ingestRecording,
+  listCareers,
   pruneRecordings,
   recentSessionsView,
+  renameCareer,
+  unassignedSeasons,
 } from '@gp/history'
 import {
   DEFAULT_PORT,
@@ -44,6 +48,7 @@ import { BUILD } from '../build-info.ts'
 import {
   type AppInfo,
   type AudioMessage,
+  type CareersInfo,
   type ChatEvent,
   IPC,
   type NotesData,
@@ -488,6 +493,28 @@ app.whenReady().then(async () => {
     })),
   })
   ipcMain.handle(IPC.notesGet, () => notesData())
+  const careersInfo = (): CareersInfo => ({
+    careers: listCareers(history),
+    unassigned: unassignedSeasons(history),
+  })
+  const careerChange = (f: () => unknown): CareersInfo | { error: string } => {
+    try {
+      f()
+      void sync?.sync()
+      return careersInfo()
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
+  ipcMain.handle(IPC.careers, () => careersInfo())
+  ipcMain.handle(
+    IPC.careerAssign,
+    (_e, link: number, to: { careerId: string } | { newCareer: string }) =>
+      careerChange(() => assignSeason(history, link, to)),
+  )
+  ipcMain.handle(IPC.careerRename, (_e, id: string, name: string) =>
+    careerChange(() => renameCareer(history, id, name)),
+  )
   ipcMain.handle(IPC.profileSave, (_e, text: string) => {
     history.setProfile(text, 'driver')
     engineer.addContext(`The driver edited your profile of him. It now reads: ${text.trim()}`)

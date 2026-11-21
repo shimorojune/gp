@@ -8,7 +8,7 @@ import type { LapRecord, Program, SessionRecord } from './collector.ts'
 // a static import of it.
 const { DatabaseSync: Database } = process.getBuiltinModule('node:sqlite') as typeof Sqlite
 
-const SCHEMA_VERSION = 5
+const SCHEMA_VERSION = 6
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS recordings (
@@ -74,7 +74,13 @@ CREATE TABLE IF NOT EXISTS sessions (
   flashbacks INTEGER NOT NULL,
   warnings INTEGER NOT NULL,
   corner_cuts INTEGER NOT NULL,
-  summary TEXT
+  summary TEXT,
+  -- finished | restarted (replaced by replaced_by, a later attempt) | abandoned (left early)
+  status TEXT NOT NULL DEFAULT 'finished',
+  replaced_by TEXT,
+  ended INTEGER NOT NULL DEFAULT 0,
+  formula TEXT,
+  car TEXT
 );
 CREATE INDEX IF NOT EXISTS sessions_track ON sessions(track_id, program, started_at);
 CREATE INDEX IF NOT EXISTS sessions_weekend ON sessions(weekend_link);
@@ -101,7 +107,8 @@ CREATE TABLE IF NOT EXISTS incidents (
   lap INTEGER,
   kind TEXT NOT NULL,
   detail TEXT,
-  session_time REAL
+  session_time REAL,
+  undone INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS incidents_session ON incidents(session_id);
 CREATE TABLE IF NOT EXISTS classification (
@@ -140,6 +147,21 @@ CREATE TABLE IF NOT EXISTS track_incidents (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS track_incidents_track ON track_incidents(track_id, at_m);
+-- Careers you play (the game has no id for a save), and which one each career season is in.
+CREATE TABLE IF NOT EXISTS careers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS seasons (
+  season_link INTEGER PRIMARY KEY,
+  career_id TEXT REFERENCES careers(id),
+  number INTEGER,
+  team TEXT,
+  first_seen TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 `
 
 /** Session stats derived from its laps, so the DB never has to re-read raw laps for a summary. */
@@ -234,6 +256,23 @@ export class HistoryDb {
         // Re-read the recordings still on disk once, to fill in tyre wear for their laps.
         this.db.exec('DELETE FROM recordings')
       }
+      if (v >= 1 && v < 6) {
+        for (const col of [
+          "status TEXT NOT NULL DEFAULT 'finished'",
+          'replaced_by TEXT',
+          'ended INTEGER NOT NULL DEFAULT 0',
+          'formula TEXT',
+          'car TEXT',
+        ])
+          this.db.exec(`ALTER TABLE sessions ADD COLUMN ${col}`)
+        this.db.exec('ALTER TABLE incidents ADD COLUMN undone INTEGER NOT NULL DEFAULT 0')
+        this.db.exec(
+          `UPDATE sessions SET car = team WHERE car IS NULL AND team IS NOT NULL;
+           INSERT OR IGNORE INTO seasons (season_link, first_seen, updated_at, team)
+             SELECT season_link, MIN(started_at), MIN(started_at), MAX(team) FROM sessions
+             WHERE program = 'career' AND season_link != 0 GROUP BY season_link;`,
+        )
+      }
       this.db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`)
       if (v >= 1 && v < 5) this.tx(() => this.dedupeCareer())
     }
@@ -248,12 +287,43 @@ export class HistoryDb {
       .prepare(
         `SELECT t.id, t.laps_done, t.finish_pos FROM sessions s JOIN sessions t
            ON t.program = 'career' AND t.weekend_link = s.weekend_link AND t.session_type = s.session_type
-          AND t.track_id = s.track_id AND t.id != s.id
-         WHERE s.id = ? AND s.program = 'career' AND s.weekend_link != 0
+          AND t.track_id = s.track_id AND t.id != s.id AND t.status != 'restarted'
+         WHERE s.id = ? AND s.program = 'career' AND s.weekend_link != 0 AND s.status != 'restarted'
          ORDER BY (t.finish_pos IS NOT NULL) DESC, t.laps_done DESC LIMIT 1`,
       )
       .get(id) as { id: number } | undefined
     return r?.id ?? null
+  }
+
+  /**
+   * A session restarted from the game's menu comes back under a new id, from lap 1. Find the
+   * attempt it replaced (same mode, track and session, no result, the new one starting within
+   * 10 minutes of the old one's end) and mark that one 'restarted'. A copy of the same session
+   * read again after an app restart shares its lap times, so it isn't a restart.
+   */
+  private linkRestart(id: number): void {
+    const prev = this.db
+      .prepare(
+        `SELECT p.id, p.uid, s.uid AS new_uid FROM sessions s JOIN sessions p
+           ON p.track_id = s.track_id AND p.session_type = s.session_type AND p.game_mode = s.game_mode
+          AND p.id != s.id AND p.status != 'restarted' AND p.finish_pos IS NULL AND p.ended = 0
+          AND p.started_at <= s.started_at
+          AND (julianday(s.started_at) - julianday(p.started_at)) * 86400 - p.duration_s BETWEEN -120 AND 600
+         WHERE s.id = ? AND s.session_type != 'Time Trial'
+         ORDER BY p.started_at DESC LIMIT 1`,
+      )
+      .get(id) as { id: number; uid: string; new_uid: string } | undefined
+    if (!prev) return
+    const shared = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM laps a JOIN laps b ON b.lap = a.lap AND b.lap_ms = a.lap_ms
+         WHERE a.session_id = ? AND b.session_id = ?`,
+      )
+      .get(prev.id, id) as { n: number }
+    if (shared.n > 0) return
+    this.db
+      .prepare("UPDATE sessions SET status = 'restarted', replaced_by = ? WHERE id = ?")
+      .run(prev.new_uid, prev.id)
   }
 
   private dedupeCareer(): void {
@@ -445,8 +515,8 @@ export class HistoryDb {
             valid_laps, best_lap_ms, best_s1_ms, best_s2_ms, best_s3_ms, ideal_lap_ms, median_lap_ms,
             consistency_ms, finish_pos, grid_pos, points, pit_stops, result_status, race_time_s,
             penalties_s, field_best_ms, num_cars, teammate, teammate_best_ms, teammate_pos,
-            teammate_points, flashbacks, warnings, corner_cuts)
-           VALUES (${Array(48).fill('?').join(', ')})`,
+            teammate_points, flashbacks, warnings, corner_cuts, status, ended, formula, car)
+           VALUES (${Array(52).fill('?').join(', ')})`,
         )
         .run(
           s.uid,
@@ -497,8 +567,20 @@ export class HistoryDb {
           s.flashbacks,
           s.warnings,
           s.cornerCutWarnings,
+          s.result || s.ended || s.sessionType === 'Time Trial' ? 'finished' : 'abandoned',
+          s.ended ? 1 : 0,
+          s.formula ?? null,
+          s.car ?? s.team,
         )
       const id = Number(r.lastInsertRowid)
+      if (s.program === 'career' && s.seasonLink) {
+        this.db
+          .prepare(
+            `INSERT INTO seasons (season_link, team, first_seen, updated_at) VALUES (?, ?, ?, ?)
+             ON CONFLICT (season_link) DO NOTHING`,
+          )
+          .run(s.seasonLink, s.team, s.startedAt, s.startedAt)
+      }
       const lap = this.db.prepare(
         `INSERT INTO laps (session_id, lap, lap_ms, s1_ms, s2_ms, s3_ms, valid, tyre, tyre_age,
           fuel_kg, wear_pct, position, setup_id, flashback) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -521,9 +603,10 @@ export class HistoryDb {
           l.flashback ? 1 : 0,
         )
       const inc = this.db.prepare(
-        'INSERT INTO incidents (session_id, lap, kind, detail, session_time) VALUES (?, ?, ?, ?, ?)',
+        'INSERT INTO incidents (session_id, lap, kind, detail, session_time, undone) VALUES (?, ?, ?, ?, ?, ?)',
       )
-      for (const i of s.incidents) inc.run(id, i.lap, i.kind, i.detail, i.sessionTime)
+      for (const i of s.incidents)
+        inc.run(id, i.lap, i.kind, i.detail, i.sessionTime, i.undone ? 1 : 0)
       const cls = this.db.prepare(
         `INSERT OR REPLACE INTO classification (session_id, position, name, team, is_player, grid,
           points, best_lap_ms, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -546,6 +629,7 @@ export class HistoryDb {
           .prepare('INSERT INTO traces (session_id, lap, lap_ms, data) VALUES (?, ?, ?, ?)')
           .run(id, s.bestTrace.lap, ms, JSON.stringify(s.bestTrace))
       }
+      this.linkRestart(id)
       // Same career session under a new game id (app restarted): one copy, merged.
       const twin = this.careerTwin(id)
       if (twin !== null) {

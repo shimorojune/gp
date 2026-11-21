@@ -2,6 +2,7 @@ import {
   CAREER_GAME_MODES,
   type CarSetup,
   type CompletedLap,
+  FORMULAS,
   GAME_MODES,
   INFRINGEMENT_TYPES,
   PENALTY_TYPES,
@@ -48,6 +49,8 @@ export interface IncidentRecord {
   kind: 'penalty' | 'warning' | 'flashback' | 'damage' | 'retired' | 'lost_places'
   detail: string
   sessionTime: number
+  /** Happened, then a flashback took it back. Kept for the debrief, left out of stats. */
+  undone?: boolean
 }
 
 /**
@@ -109,6 +112,12 @@ export interface SessionRecord {
   weekendLink: number
   sessionLink: number
   team: string | null
+  /** Series: F1, F1 Classic, F2... (session packet `formula`). */
+  formula: string
+  /** The car as the driver knows it: team, plus the series when it isn't modern F1. */
+  car: string | null
+  /** The game sent its session-ended event (the session ran to its end). */
+  ended: boolean
   /** Setup as set at the start of the session; kept out of the setup identity. */
   fuelLoad: number | null
   laps: LapRecord[]
@@ -179,6 +188,10 @@ class SessionAccum {
   private incidents: IncidentRecord[] = []
   private flashbacks = 0
   private flashbackLaps = new Set<number>()
+  /** Session time each lap was completed at, to undo laps a flashback rewinds past. */
+  private lapDoneAt = new Map<number, number>()
+  private sessionTime = 0
+  private ended = false
   private playerIdx = 0
   private curLap = 0
   private lapDistance = -1
@@ -215,6 +228,7 @@ class SessionAccum {
   feed(p: Packet, at: number): void {
     this.lastAt = at
     this.playerIdx = p.header.playerCarIndex
+    this.sessionTime = p.header.sessionTime
     this.state.ingest(p)
     switch (p.id) {
       case PacketId.Session:
@@ -340,12 +354,26 @@ class SessionAccum {
       case 'RTMT':
         if (d.vehicleIdx === this.playerIdx) this.incident('retired', 'retired', sessionTime)
         break
-      case 'FLBK':
+      case 'FLBK': {
         this.flashbacks++
+        const to = d.flashbackSessionTime ?? sessionTime
+        // Everything after the point the game jumped back to never happened: laps completed
+        // since are driven again (or not at all), and incidents since are kept but undone.
+        for (const [lap, t] of this.lapDoneAt)
+          if (t > to) {
+            this.laps.delete(lap)
+            this.lapDoneAt.delete(lap)
+          }
+        for (const i of this.incidents) if (i.sessionTime > to) i.undone = true
+        const lost = Math.max(0, Math.round((sessionTime - to) * 10) / 10)
         this.flashbackLaps.add(this.curLap)
         // The trace for this lap now mixes two attempts; don't keep it.
         if (this.trace) this.trace.dirty = true
-        this.incident('flashback', 'flashback used', sessionTime)
+        this.incident('flashback', `flashback used, ${lost}s back`, sessionTime)
+        break
+      }
+      case 'SEND':
+        this.ended = true
         break
     }
   }
@@ -368,6 +396,7 @@ class SessionAccum {
     }
     // A flashback can replay a lap: the last completion wins.
     this.laps.set(l.lapNumber, rec)
+    this.lapDoneAt.set(l.lapNumber, this.sessionTime)
     const tr = this.trace
     if (tr && tr.lap === l.lapNumber && !tr.dirty && l.valid) {
       const done = finishTrace(tr)
@@ -479,6 +508,12 @@ class SessionAccum {
       weekendLink: s.weekendLinkIdentifier,
       sessionLink: s.sessionLinkIdentifier,
       team: this.teamId === null ? null : (TEAMS[this.teamId] ?? `team ${this.teamId}`),
+      formula: FORMULAS[s.formula] ?? `formula #${s.formula}`,
+      car:
+        this.teamId === null
+          ? null
+          : `${TEAMS[this.teamId] ?? `team ${this.teamId}`}${s.formula === 0 ? '' : ` (${FORMULAS[s.formula] ?? `formula #${s.formula}`})`}`,
+      ended: this.ended,
       fuelLoad: this.fuelLoad,
       laps,
       setups: this.setups,

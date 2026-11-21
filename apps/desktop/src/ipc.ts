@@ -29,6 +29,9 @@ export const IPC = {
   secretsTest: 'gp:secrets-test',
   secretsClear: 'gp:secrets-clear',
   status: 'gp:status',
+  careers: 'gp:careers',
+  careerAssign: 'gp:career-assign',
+  careerRename: 'gp:career-rename',
 } as const
 
 export interface NoteItem {
@@ -259,6 +262,30 @@ export interface GpBridge {
   testSecrets(cfg: InfisicalInput): Promise<SecretsTestResult>
   clearSecrets(): Promise<SecretsStatusInfo>
   status(): Promise<StatusInfo>
+  /** Careers and the career seasons still waiting for "new career, or season N of X?". */
+  careers(): Promise<CareersInfo>
+  /** File a season under an existing career or a new one; returns the refreshed list. */
+  assignSeason(
+    seasonLink: number,
+    to: { careerId: string } | { newCareer: string },
+  ): Promise<CareersInfo | { error: string }>
+  renameCareer(id: string, name: string): Promise<CareersInfo | { error: string }>
+}
+
+export interface CareersInfo {
+  careers: {
+    id: string
+    name: string
+    createdAt: string
+    seasons: { seasonLink: number; number: number | null; team: string | null }[]
+  }[]
+  unassigned: {
+    seasonLink: number
+    team: string | null
+    firstSeen: string
+    sessions: number
+    tracks: string[]
+  }[]
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */

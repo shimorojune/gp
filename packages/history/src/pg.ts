@@ -140,6 +140,30 @@ CREATE TABLE gp_profile (
   edited_by TEXT NOT NULL
 );
 `,
+  // 2: session status (restarts, abandoned), flashback-undone incidents, careers above seasons.
+  `
+ALTER TABLE gp_sessions
+  ADD COLUMN status TEXT NOT NULL DEFAULT 'finished',
+  ADD COLUMN replaced_by TEXT,
+  ADD COLUMN ended INTEGER NOT NULL DEFAULT 0,
+  ADD COLUMN formula TEXT,
+  ADD COLUMN car TEXT;
+ALTER TABLE gp_incidents ADD COLUMN undone INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE gp_careers (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE gp_seasons (
+  season_link BIGINT PRIMARY KEY,
+  career_id TEXT REFERENCES gp_careers(id),
+  number INTEGER,
+  team TEXT,
+  first_seen TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+`,
 ]
 
 /** BIGINT comes back as a string by default; GP's ids all fit a JS number. */
@@ -296,6 +320,51 @@ export class PgStore {
       [p.text, p.updatedAt, p.editedBy],
     )
   }
+
+  async careers(): Promise<CareerRow[]> {
+    return (await this.pool.query('SELECT id, name, created_at, updated_at FROM gp_careers'))
+      .rows as CareerRow[]
+  }
+
+  async seasons(): Promise<SeasonRow[]> {
+    return (
+      await this.pool.query(
+        'SELECT season_link, career_id, number, team, first_seen, updated_at FROM gp_seasons',
+      )
+    ).rows as SeasonRow[]
+  }
+
+  async putCareer(r: CareerRow): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO gp_careers (id, name, created_at, updated_at) VALUES ($1, $2, $3, $4)
+       ON CONFLICT (id) DO UPDATE SET name = $2, updated_at = $4`,
+      [r.id, r.name, r.created_at, r.updated_at],
+    )
+  }
+
+  async putSeason(r: SeasonRow): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO gp_seasons (season_link, career_id, number, team, first_seen, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (season_link) DO UPDATE SET career_id = $2, number = $3, team = $4, updated_at = $6`,
+      [r.season_link, r.career_id, r.number, r.team, r.first_seen, r.updated_at],
+    )
+  }
+}
+
+export interface CareerRow {
+  id: string
+  name: string
+  created_at: string
+  updated_at: string
+}
+export interface SeasonRow {
+  season_link: number
+  career_id: string | null
+  number: number | null
+  team: string | null
+  first_seen: string
+  updated_at: string
 }
 
 async function insert(c: pg.PoolClient, table: string, row: Row): Promise<void> {
@@ -390,6 +459,57 @@ export class HistorySync {
     }
   }
 
+  /** Careers first (seasons point at them), each row kept from whichever side changed last. */
+  private async syncCareers(): Promise<void> {
+    const db = this.local.db
+    const localCareers = new Map(
+      (
+        db
+          .prepare('SELECT id, name, created_at, updated_at FROM careers')
+          .all() as unknown as CareerRow[]
+      ).map((r) => [r.id, r]),
+    )
+    const remoteCareers = await this.remote.careers()
+    for (const r of remoteCareers) {
+      const l = localCareers.get(r.id)
+      if (!l || r.updated_at > l.updated_at)
+        db.prepare(
+          `INSERT INTO careers (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)
+           ON CONFLICT (id) DO UPDATE SET name = excluded.name, updated_at = excluded.updated_at`,
+        ).run(r.id, r.name, r.created_at, r.updated_at)
+    }
+    const remoteById = new Map(remoteCareers.map((r) => [r.id, r]))
+    for (const l of localCareers.values()) {
+      const r = remoteById.get(l.id)
+      if (!r || l.updated_at > r.updated_at) await this.remote.putCareer(l)
+    }
+    const localSeasons = new Map(
+      (
+        db
+          .prepare(
+            'SELECT season_link, career_id, number, team, first_seen, updated_at FROM seasons',
+          )
+          .all() as unknown as SeasonRow[]
+      ).map((r) => [r.season_link, r]),
+    )
+    const remoteSeasons = await this.remote.seasons()
+    for (const r of remoteSeasons) {
+      const l = localSeasons.get(r.season_link)
+      if (!l || r.updated_at > l.updated_at)
+        db.prepare(
+          `INSERT INTO seasons (season_link, career_id, number, team, first_seen, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (season_link) DO UPDATE SET
+           career_id = excluded.career_id, number = excluded.number, team = excluded.team,
+           first_seen = MIN(first_seen, excluded.first_seen), updated_at = excluded.updated_at`,
+        ).run(r.season_link, r.career_id, r.number, r.team, r.first_seen, r.updated_at)
+    }
+    const remoteByLink = new Map(remoteSeasons.map((r) => [r.season_link, r]))
+    for (const l of localSeasons.values()) {
+      const r = remoteByLink.get(l.season_link)
+      if (!r || l.updated_at > r.updated_at) await this.remote.putSeason(l)
+    }
+  }
+
   /** One sync pass. Concurrent calls share the pass in progress. Never throws. */
   sync(): Promise<SyncStatus> {
     this.running ??= this.pass().finally(() => {
@@ -430,6 +550,7 @@ export class HistorySync {
         mark.run(uid, hash, new Date().toISOString())
         pulled++
       }
+      await this.syncCareers()
       const lp = this.local.profile()
       const rp = await this.remote.profile()
       if (lp && (!rp || lp.updatedAt > rp.updatedAt)) await this.remote.setProfile(lp)

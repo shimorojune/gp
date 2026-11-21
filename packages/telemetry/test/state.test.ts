@@ -11,6 +11,29 @@ function parsed(buf: Buffer): Packet {
 }
 
 describe('RaceState', () => {
+  it('forgets laps a flashback takes back across the line', () => {
+    const state = new RaceState({ now: () => 0 })
+    state.ingest(parsed(buildPacket(PacketId.Session)))
+    state.ingest(parsed(buildPacket(PacketId.CarTelemetry)))
+    state.ingest(parsed(buildPacket(PacketId.CarStatus)))
+    const lap = (f: Parameters<typeof writeLap>[2]) => {
+      const b = buildPacket(PacketId.LapData)
+      writeLap(b, 0, f)
+      state.ingest(parsed(b))
+    }
+    lap({ lapNum: 1 })
+    lap({ lapNum: 2, lastLapMs: 80000 })
+    lap({ lapNum: 3, lastLapMs: 78000 })
+    expect(state.snapshot().player?.bestLapMs).toBe(78000)
+    // Flashback to just before the line on lap 2: lap 2's 1:18.0 never happened.
+    lap({ lapNum: 2, lastLapMs: 80000 })
+    expect(state.snapshot().player?.laps.map((l) => l.lapNumber)).toEqual([1])
+    expect(state.snapshot().player?.bestLapMs).toBe(80000)
+    lap({ lapNum: 3, lastLapMs: 79000 })
+    expect(state.snapshot().player?.laps.map((l) => l.lapTimeMs)).toEqual([80000, 79000])
+    expect(state.snapshot().player?.bestLapMs).toBe(79000)
+  })
+
   it('emits a completed lap with sectors when the lap number ticks over', () => {
     let clock = 0
     const state = new RaceState({ now: () => clock })

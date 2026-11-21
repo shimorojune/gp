@@ -8,9 +8,13 @@ import {
   type LapRecord,
   PgStore,
   SessionCollector,
+  assignSeason,
+  careerOfSeason,
   exportSession,
   importSession,
+  listCareers,
   payloadHash,
+  renameCareer,
 } from '../src/index.ts'
 
 /**
@@ -101,7 +105,7 @@ describe.skipIf(!PG_URL)('Postgres sync', () => {
     const c = new pg.Client({ connectionString: PG_URL })
     await c.connect()
     await c.query(
-      'DROP TABLE IF EXISTS gp_track_incidents, gp_traces, gp_classification, gp_incidents, gp_laps, gp_sessions, gp_setups, gp_profile, gp_migrations CASCADE',
+      'DROP TABLE IF EXISTS gp_seasons, gp_careers, gp_track_incidents, gp_traces, gp_classification, gp_incidents, gp_laps, gp_sessions, gp_setups, gp_profile, gp_migrations CASCADE',
     )
     await c.end()
     store = new PgStore(PG_URL!)
@@ -114,7 +118,7 @@ describe.skipIf(!PG_URL)('Postgres sync', () => {
     expect(sync.localStatus().pending).toBe(2)
     const first = await sync.sync()
     expect(first).toMatchObject({ pushed: 2, pulled: 0, pending: 0, error: null })
-    expect(await store.migrate()).toBe(1)
+    expect(await store.migrate()).toBe(2)
 
     const again = await sync.sync()
     expect(again.pushed).toBe(0)
@@ -136,6 +140,25 @@ describe.skipIf(!PG_URL)('Postgres sync', () => {
     expect((await sync.sync()).pushed).toBe(1)
     const remote = await store.pullSession('42')
     expect(remote?.session.summary).toBe('P6')
+  })
+
+  it('carries careers and seasons both ways, newest edit winning', async () => {
+    const mac = seeded()
+    mac.db
+      .prepare(
+        "INSERT INTO seasons (season_link, team, first_seen, updated_at) VALUES (77, 'McLaren', '2026-11-01', '2026-11-01')",
+      )
+      .run()
+    const id = assignSeason(mac, 77, { newCareer: 'McLaren' }, '2026-11-20T10:00:00.000Z')
+    await new HistorySync(mac, store).sync()
+    const other = new HistoryDb(':memory:')
+    const otherSync = new HistorySync(other, store)
+    await otherSync.sync()
+    expect(careerOfSeason(other, 77)).toEqual({ id, name: 'McLaren', season: 1 })
+    renameCareer(other, id, 'Papaya', '2026-11-21T10:00:00.000Z')
+    await otherSync.sync()
+    await new HistorySync(mac, store).sync()
+    expect(listCareers(mac)[0]!.name).toBe('Papaya')
   })
 
   it('reports a dead connection instead of throwing, and keeps the work pending', async () => {

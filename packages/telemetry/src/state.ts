@@ -346,6 +346,14 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
       const prev = acc.prevLap
       acc.prevLap = cur
       if (!prev || cur.resultStatus < 2) continue
+      // A flashback across the line takes the lap counter back: those laps never happened.
+      if (cur.currentLapNum < prev.currentLapNum && i === this.playerIdx) {
+        this.playerLaps = this.playerLaps.filter((l) => l.lapNumber < cur.currentLapNum)
+        acc.bestLapMs = this.playerLaps.reduce(
+          (b, l) => (l.valid && l.lapTimeMs > 0 && (b === 0 || l.lapTimeMs < b) ? l.lapTimeMs : b),
+          0,
+        )
+      }
       if (cur.currentLapNum === prev.currentLapNum + 1 && cur.lastLapTimeInMS > 0) {
         const s1 = prev.sector1TimeMinutes * 60000 + prev.sector1TimeInMS
         const s2 = prev.sector2TimeMinutes * 60000 + prev.sector2TimeInMS
@@ -374,7 +382,10 @@ export class RaceState extends TypedEmitter<RaceStateEvents> {
           gapAheadMs: cur.deltaToCarInFrontInMS,
           sessionTime: this.sessionTime,
         }
-        if (isPlayer) this.playerLaps.push(completed)
+        if (isPlayer) {
+          this.playerLaps = this.playerLaps.filter((l) => l.lapNumber !== completed.lapNumber)
+          this.playerLaps.push(completed)
+        }
         this.emit('lapCompleted', { ...completed, isPlayer })
       }
     }
