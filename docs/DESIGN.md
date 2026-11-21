@@ -71,11 +71,15 @@ radioCard({ driver: 'Piastri', number: 81, teamId: 8, lines: [
 - White 2px `:focus-visible` ring inside `.gp-app`.
 - `prefers-reduced-motion` cuts transitions and stops the waveform.
 
-## Local skin (planned, never committed)
+## Local skin (your own font, never committed)
 
-With the desktop wiring, GP will load `~/Documents/GP/skin/skin.css` after `gp-ui.css` if it
-exists. It can `@font-face` a font you own as `'GP Skin Display'` (tried first by the display
-token; it must have tabular figures) and override any `--gp-*` token. Those files stay on your Mac.
+Put font files you own in `~/Documents/GP/skin/` (or set `GP_SKIN_DIR`). The style-guide build
+(`pnpm --filter @gp/ui styleguide`) copies them into its local `dist/` only and registers them as
+`'GP Skin Display'`, which the display token tries before the bundled Saira. Weight comes from the
+file name: `Regular` 400, `Bold` 700, `Wide` 800 (the cut the TV names use), `Black` 900; italics
+are skipped. A `skin.css` there is appended too, for `--gp-*` overrides. Use a face with tabular
+figures. The desktop app will load the same folder when it moves onto `@gp/ui`. These files never
+go into the repo or a release.
 
 ## Using it in the desktop app (next step)
 

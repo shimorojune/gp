@@ -2,8 +2,16 @@
 // standalone style guide at dist/styleguide/index.html. Tokens are read straight from
 // src/tokens.ts (Node strips the types).
 import { execFileSync } from 'node:child_process'
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from 'node:fs'
 import { createRequire } from 'node:module'
+import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { tokensCss } from '../src/css-vars.ts'
@@ -44,6 +52,40 @@ const css = [
 writeFileSync(join(dist, 'gp-ui.css'), css)
 console.log(`@gp/ui: dist/gp-ui.css (${(css.length / 1024).toFixed(1)} KB)`)
 
+/**
+ * Local skin (docs/DESIGN.md): font files you own in ~/Documents/GP/skin (or GP_SKIN_DIR) become
+ * 'GP Skin Display', and skin.css there is appended. Only goes into the local style-guide build,
+ * never into the repo or a release.
+ */
+function localSkin(out) {
+  const dir = process.env.GP_SKIN_DIR || join(homedir(), 'Documents', 'GP', 'skin')
+  if (!existsSync(dir)) return ''
+  const faces = []
+  for (const f of readdirSync(dir)) {
+    const ext = f.match(/\.(woff2?|otf|ttf)$/i)?.[1].toLowerCase()
+    if (!ext || /italic/i.test(f)) continue
+    // Weight from the file name. The TV names use the Wide cut, so it fills the 800 slot.
+    const weight = /black|heavy/i.test(f)
+      ? 900
+      : /wide/i.test(f)
+        ? 800
+        : /bold/i.test(f)
+          ? 700
+          : 400
+    mkdirSync(join(out, 'skin'), { recursive: true })
+    copyFileSync(join(dir, f), join(out, 'skin', f))
+    const format = { woff2: 'woff2', woff: 'woff', otf: 'opentype', ttf: 'truetype' }[ext]
+    faces.push(
+      `@font-face { font-family: 'GP Skin Display'; font-weight: ${weight}; font-style: normal; font-display: swap; src: url('./skin/${encodeURIComponent(f)}') format('${format}'); }`,
+    )
+    console.log(`@gp/ui: local skin font ${f} -> weight ${weight}`)
+  }
+  const extra = existsSync(join(dir, 'skin.css')) ? readFileSync(join(dir, 'skin.css'), 'utf8') : ''
+  return faces.length || extra
+    ? `\n/* Local skin from ${dir} */\n${faces.join('\n')}\n${extra}`
+    : ''
+}
+
 if (args.has('--styleguide')) {
   const { build } = await import('esbuild')
   const out = join(dist, 'styleguide')
@@ -56,7 +98,7 @@ if (args.has('--styleguide')) {
     target: 'chrome120',
     logLevel: 'warning',
   })
-  writeFileSync(join(out, 'gp-ui.css'), css)
+  writeFileSync(join(out, 'gp-ui.css'), css + localSkin(out))
   for (const f of readdirSync(join(dist, 'fonts'))) {
     copyFileSync(join(dist, 'fonts', f), join(out, 'fonts', f))
   }
