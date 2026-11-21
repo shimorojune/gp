@@ -32,6 +32,11 @@ type PttEvents = {
  * mode so the game keeps the controller. Apple's GameController API can't see this button
  * (Phase 0). USB report 0x01 has buttons at bytes 8-10, Bluetooth report 0x31 one byte later.
  */
+/** A DualSense is plugged in or paired (for the pre-flight check). */
+export function dualSenseConnected(): boolean {
+  return HID.devices().some((d) => d.vendorId === SONY && DUALSENSE.includes(d.productId))
+}
+
 export class DualSensePtt extends TypedEmitter<PttEvents> {
   private dev: HID.HID | null = null
   private pressed = false

@@ -28,6 +28,9 @@ const bridge: GpBridge = {
   },
   checkUpdate: () => ipcRenderer.invoke(IPC.updateCheck),
   installUpdate: () => ipcRenderer.invoke(IPC.updateInstall),
+  preflight: () => ipcRenderer.invoke(IPC.preflight),
+  saveKeys: (keys) => ipcRenderer.invoke(IPC.saveKeys, keys),
+  relaunch: () => ipcRenderer.send(IPC.relaunch),
 }
 
 contextBridge.exposeInMainWorld('gp', bridge)

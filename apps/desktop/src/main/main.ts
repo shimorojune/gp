@@ -22,7 +22,7 @@ import {
 } from '@gp/history'
 import { DEFAULT_PORT, RaceState, RecordingWriter, TelemetryListener } from '@gp/telemetry'
 import { gpHome, loadDotEnv } from '@gp/voice'
-import { BrowserWindow, app, globalShortcut, ipcMain } from 'electron'
+import { BrowserWindow, app, globalShortcut, ipcMain, systemPreferences } from 'electron'
 import HID from 'node-hid'
 import { BUILD } from '../build-info.ts'
 import {
@@ -35,6 +35,7 @@ import {
   type SnapshotMessage,
   type UpdateState,
 } from '../ipc.ts'
+import { preflight, saveKeys } from './preflight.ts'
 import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
@@ -444,6 +445,7 @@ app.whenReady().then(async () => {
   engineer.start()
   voice.start()
   startUpdater()
+  startPreflight()
 
   // 10 Hz is plenty for a dashboard; the store itself ingests at full rate.
   setInterval(() => {
@@ -485,6 +487,32 @@ async function installUpdate(): Promise<string | null> {
   const err = await updater.install(process.pid)
   if (!err) app.quit()
   return err
+}
+
+function startPreflight(): void {
+  ipcMain.handle(IPC.preflight, async () => ({
+    checks: await preflight({
+      home: GP_HOME,
+      port: PORT,
+      telemetryAgeMs: () => (lastPacketAt ? Date.now() - lastPacketAt : null),
+      micAccess: () => systemPreferences.getMediaAccessStatus('microphone'),
+    }),
+    firstRun: !existsSync(join(GP_HOME, '.env')),
+  }))
+  ipcMain.handle(IPC.saveKeys, (_e, keys) => {
+    try {
+      const file = saveKeys(GP_HOME, keys)
+      console.log(`[setup] API keys saved to ${file}`)
+      return { file }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  // The voice pipeline reads the keys at startup.
+  ipcMain.on(IPC.relaunch, () => {
+    app.relaunch()
+    app.quit()
+  })
 }
 
 function startUpdater(): void {

@@ -61,6 +61,12 @@
       .note button { padding: 0 8px; }
       .sess { padding: 4px 0; border-bottom: 1px solid var(--line); }
       .hidden { display: none; }
+      .check { display: flex; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+      .check .s { width: 16px; }
+      .check.ok .s { color: var(--good); }
+      .check.warn .s { color: var(--warn); }
+      .check.fail .s { color: var(--bad); }
+      .check .t { flex: 1; }
     </style>
   </head>
   <body>
@@ -71,10 +77,25 @@
       <span id="pps" class="pill">0 pkt/s</span>
       <span class="spacer"></span>
       <button id="update" class="hidden" title="GP update"></button>
+      <button id="checkTab">Check</button>
       <button id="tab">Notes</button>
       <button id="ontop">Pin</button>
       <button id="rec">Record</button>
     </header>
+    <div id="checkView" class="hidden">
+      <section id="setup" class="hidden">
+        <h2>First-run setup</h2>
+        <div class="muted">GP keeps its data in ~/Documents/GP. Paste your voice API keys (saved to ~/Documents/GP/.env, only on this Mac). Either can stay empty: GP then uses local whisper or the Mac voice.</div>
+        <div class="row"><input id="dgKey" placeholder="Deepgram API key (speech to text)" autocomplete="off" /></div>
+        <div class="row"><input id="elKey" placeholder="ElevenLabs API key (GP's voice)" autocomplete="off" /></div>
+        <div class="row"><span class="k" id="keysSaved"></span><span class="spacer"></span><button id="keysSave">Save</button><button id="relaunch" class="hidden">Restart GP</button></div>
+      </section>
+      <section>
+        <h2>Pre-flight</h2>
+        <div id="checks" class="muted">Checking…</div>
+        <div class="row"><span class="spacer"></span><button id="keysShow">API keys</button><button id="checkRun">Check again</button></div>
+      </section>
+    </div>
     <div id="notesView" class="hidden">
       <section>
         <h2>GP's read on you</h2>

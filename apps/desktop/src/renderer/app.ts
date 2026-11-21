@@ -2,6 +2,7 @@ import { formatDelta, formatLapTime } from '@gp/shared'
 import {
   type GpBridge,
   type NotesData,
+  type PreflightResult,
   type SnapshotMessage,
   type UpdateState,
   versionLabel,
@@ -169,14 +170,65 @@ function renderNotes(d: NotesData): void {
     : 'No sessions yet.'
 }
 
-let notesOpen = false
-$('tab').addEventListener('click', async () => {
-  notesOpen = !notesOpen
-  $('notesView').classList.toggle('hidden', !notesOpen)
-  $('raceView').classList.toggle('hidden', notesOpen)
-  $('tab').textContent = notesOpen ? 'Race' : 'Notes'
-  if (notesOpen) renderNotes(await window.gp.notes())
+// ---------------------------------------------------------------- views: race / notes / check
+
+type View = 'race' | 'notes' | 'check'
+let view: View = 'race'
+async function show(v: View): Promise<void> {
+  view = v
+  $('raceView').classList.toggle('hidden', v !== 'race')
+  $('notesView').classList.toggle('hidden', v !== 'notes')
+  $('checkView').classList.toggle('hidden', v !== 'check')
+  $('tab').textContent = v === 'notes' ? 'Race' : 'Notes'
+  $('checkTab').textContent = v === 'check' ? 'Race' : 'Check'
+  if (v === 'notes') renderNotes(await window.gp.notes())
+  if (v === 'check') await runChecks()
+}
+$('tab').addEventListener('click', () => void show(view === 'notes' ? 'race' : 'notes'))
+$('checkTab').addEventListener('click', () => void show(view === 'check' ? 'race' : 'check'))
+
+// ---------------------------------------------------------------- pre-flight + first-run setup
+
+const MARK = { ok: '✓', warn: '!', fail: '✗' } as const
+function renderChecks(r: PreflightResult): void {
+  $('checks').innerHTML = r.checks
+    .map(
+      (c) =>
+        `<div class="check ${c.status}"><span class="s">${MARK[c.status]}</span><span class="k" style="width:150px">${esc(c.label)}</span><span class="t">${esc(c.detail)}</span></div>`,
+    )
+    .join('')
+  if (r.firstRun) $('setup').classList.remove('hidden')
+  const bad = r.checks.filter((c) => c.status === 'fail').length
+  $('checkTab').classList.toggle('on', bad > 0)
+}
+async function runChecks(): Promise<PreflightResult> {
+  const r = await window.gp.preflight()
+  renderChecks(r)
+  return r
+}
+$('checkRun').addEventListener('click', () => void runChecks())
+$('keysShow').addEventListener('click', () => $('setup').classList.toggle('hidden'))
+$('keysSave').addEventListener('click', async () => {
+  const r = await window.gp.saveKeys({
+    deepgram: ($('dgKey') as HTMLInputElement).value,
+    elevenlabs: ($('elKey') as HTMLInputElement).value,
+  })
+  if ('error' in r) {
+    $('keysSaved').textContent = r.error
+    return
+  }
+  ;($('dgKey') as HTMLInputElement).value = ''
+  ;($('elKey') as HTMLInputElement).value = ''
+  $('keysSaved').textContent = `Saved to ${r.file}. Restart GP to use them.`
+  $('relaunch').classList.remove('hidden')
+  await runChecks()
 })
+$('relaunch').addEventListener('click', () => window.gp.relaunch())
+// First run, or something GP can't work without: open the Check tab straight away.
+void runChecks().then((r) => {
+  if (r.firstRun || r.checks.some((c) => c.status === 'fail')) void show('check')
+})
+
 $('profileSave').addEventListener('click', async () => {
   renderNotes(await window.gp.saveProfile(($('profile') as HTMLTextAreaElement).value))
   $('profileSaved').textContent = 'Saved'

@@ -17,6 +17,9 @@ export const IPC = {
   updateState: 'gp:update-state',
   updateCheck: 'gp:update-check',
   updateInstall: 'gp:update-install',
+  preflight: 'gp:preflight',
+  saveKeys: 'gp:save-keys',
+  relaunch: 'gp:relaunch',
 } as const
 
 export interface NoteItem {
@@ -94,6 +97,25 @@ export interface SnapshotMessage {
   recording: RecordingState
 }
 
+/** One line of the pre-flight check (main/preflight.ts). */
+export interface PreflightCheck {
+  id: string
+  label: string
+  status: 'ok' | 'warn' | 'fail'
+  detail: string
+}
+
+export interface PreflightResult {
+  checks: PreflightCheck[]
+  /** No ~/Documents/GP/.env yet: show the setup form. */
+  firstRun: boolean
+}
+
+export interface SetupKeys {
+  deepgram?: string
+  elevenlabs?: string
+}
+
 /** The self-updater (main/updater.ts). */
 export interface UpdateState {
   phase:
@@ -142,6 +164,10 @@ export interface GpBridge {
   checkUpdate(): Promise<UpdateState>
   /** Quits and installs; resolves with a reason when it can't. */
   installUpdate(): Promise<string | null>
+  preflight(): Promise<PreflightResult>
+  /** Writes ~/Documents/GP/.env; GP needs a restart to use the keys. */
+  saveKeys(keys: SetupKeys): Promise<{ file: string } | { error: string }>
+  relaunch(): void
 }
 
 /** What the chat overlay's preload exposes on `window.gpChat`. */
