@@ -145,14 +145,69 @@ const png = {
   512: await render(art.full, 512),
   1024: await render(art.full, 1024),
 }
+/** Straight (non-premultiplied) RGBA pixels of a PNG, decoded by Chromium. */
+async function rgba(data) {
+  const px = await page.evaluate(async (b64) => {
+    const img = new Image()
+    img.src = `data:image/png;base64,${b64}`
+    await img.decode()
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    const ctx = c.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    return Array.from(ctx.getImageData(0, 0, img.width, img.height).data)
+  }, data.toString('base64'))
+  return Buffer.from(px)
+}
+const raw = { 16: await rgba(png[16]), 32: await rgba(png[32]) }
 await browser.close()
 writeFileSync(join(srcDir, 'icon-1024.png'), png[1024])
 
-// ICNS: 'icns' + total length, then (OSType, length incl. 8-byte header, PNG data) entries.
+// ICNS: 'icns' + total length, then (OSType, length incl. 8-byte header, data) entries.
+// The 16 and 32px @1x reps use the legacy is32/s8mk and il32/l8mk encodings (RLE colour + 8-bit
+// mask), like Apple's iconutil. PNG data in icp4/icp5 shows up as garbled pixels in Finder's
+// title bar and path bar on some macOS versions.
+function packBits(bytes) {
+  // Apple icon RLE, per channel: 0x00-0x7f = (n+1) literal bytes follow; 0x80-0xff = the next
+  // byte repeated (n-0x80+3) times.
+  const out = []
+  let i = 0
+  while (i < bytes.length) {
+    let run = 1
+    while (i + run < bytes.length && run < 130 && bytes[i + run] === bytes[i]) run++
+    if (run >= 3) {
+      out.push(0x80 + run - 3, bytes[i])
+      i += run
+      continue
+    }
+    const start = i
+    while (i < bytes.length && i - start < 128) {
+      if (i + 2 < bytes.length && bytes[i] === bytes[i + 1] && bytes[i] === bytes[i + 2]) break
+      i++
+    }
+    out.push(i - start - 1, ...bytes.subarray(start, i))
+  }
+  return Buffer.from(out)
+}
+function legacy(px) {
+  const pixels = raw[px]
+  const n = px * px
+  const channel = (c) => {
+    const b = Buffer.alloc(n)
+    for (let p = 0; p < n; p++) b[p] = pixels[p * 4 + c]
+    return b
+  }
+  return { color: Buffer.concat([0, 1, 2].map((c) => packBits(channel(c)))), mask: channel(3) }
+}
+const l16 = legacy(16)
+const l32 = legacy(32)
 const entries = [
-  ['icp4', png[16]], // 16
+  ['is32', l16.color], // 16
+  ['s8mk', l16.mask],
   ['ic11', png[32]], // 16@2x
-  ['icp5', png[32]], // 32
+  ['il32', l32.color], // 32
+  ['l8mk', l32.mask],
   ['ic12', png[64]], // 32@2x
   ['ic07', png[128]], // 128
   ['ic13', png[256]], // 128@2x
