@@ -373,18 +373,17 @@ export async function debriefSession(
 ): Promise<{ summary: string; profile: string } | null> {
   const detail = sessionDetailView(history, sessionId)
   if (!detail || detail.laps.length < 3) return null
-  const trackId = (
-    history.db.prepare('SELECT track_id FROM sessions WHERE id = ?').get(sessionId) as {
-      track_id: number
-    }
-  ).track_id
+  const { track_id: trackId, started_at: startedAt } = history.db
+    .prepare('SELECT track_id, started_at FROM sessions WHERE id = ?')
+    .get(sessionId) as { track_id: number; started_at: string }
+  // Only what came before this session: a backfilled debrief mustn't see later laps.
   const prev = history.db
     .prepare(
       `SELECT MIN(l.lap_ms) AS pb FROM laps l JOIN sessions s ON s.id = l.session_id
-       WHERE s.track_id = ? AND s.id != ? AND l.valid = 1 AND l.flashback = 0`,
+       WHERE s.track_id = ? AND s.started_at < ? AND l.valid = 1 AND l.flashback = 0`,
     )
-    .get(trackId, sessionId) as { pb: number | null }
-  const recall = trackRecall(history, trackId, 4)
+    .get(trackId, startedAt) as { pb: number | null }
+  const recall = trackRecall(history, trackId, 4, startedAt)
   const input = JSON.stringify({
     session: detail,
     previousPbAtTrackMs: prev.pb,
