@@ -596,7 +596,7 @@ is mostly a practice/quali feature.
    also go to `~/Documents/GP/logs/gp.log` (Finder launch has no terminal). PATH gets
    `/opt/homebrew/bin` added so ffmpeg/whisper-cli are found when opened from Finder.
    Info.plist has `NSMicrophoneUsageDescription` (macOS asks once for the ffmpeg mic capture).
-2. **Releases.** `.github/workflows/release.yml` on macos-14: lint, typecheck, test, then
+2. **Releases.** `.github/workflows/release.yml` on macos-15: lint, typecheck, test, then
    semantic-release on `main` (config `release.config.mjs`). Conventional commits decide the
    version (fix → patch, feat → minor, `!`/BREAKING CHANGE → major; chore/docs/refactor/test →
    no release); it bumps `apps/desktop/package.json` only, writes `apps/desktop/CHANGELOG.md`,
