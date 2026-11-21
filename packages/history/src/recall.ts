@@ -47,14 +47,23 @@ interface Row {
   [k: string]: unknown
 }
 
-export function trackRecall(db: HistoryDb, trackId: number, recentLimit = 5): TrackRecall | null {
+/**
+ * `before` (ISO) limits it to sessions that started earlier: a debrief written later (a
+ * backfill) must not compare the session with laps driven after it.
+ */
+export function trackRecall(
+  db: HistoryDb,
+  trackId: number,
+  recentLimit = 5,
+  before = '9999',
+): TrackRecall | null {
   const q = db.db
   const counts = q
     .prepare(
       `SELECT program, COUNT(*) AS n, SUM(laps_done) AS laps, MAX(track) AS track
-       FROM sessions WHERE track_id = ? GROUP BY program`,
+       FROM sessions WHERE track_id = ? AND started_at < ? GROUP BY program`,
     )
-    .all(trackId) as { program: Program; n: number; laps: number; track: string }[]
+    .all(trackId, before) as { program: Program; n: number; laps: number; track: string }[]
   if (!counts.length) return null
   const sessions = { sim: 0, career: 0 }
   let lapsDriven = 0
@@ -66,35 +75,35 @@ export function trackRecall(db: HistoryDb, trackId: number, recentLimit = 5): Tr
     .prepare(
       `SELECT l.lap_ms, l.tyre, l.setup_id, s.started_at, s.mode, s.session_type
        FROM laps l JOIN sessions s ON s.id = l.session_id
-       WHERE s.track_id = ? AND l.valid = 1 AND l.flashback = 0
+       WHERE s.track_id = ? AND s.started_at < ? AND l.valid = 1 AND l.flashback = 0
        ORDER BY l.lap_ms LIMIT 1`,
     )
-    .get(trackId) as Row | undefined
+    .get(trackId, before) as Row | undefined
   const sec = q
     .prepare(
       `SELECT MIN(l.s1_ms) AS s1, MIN(l.s2_ms) AS s2, MIN(l.s3_ms) AS s3
        FROM laps l JOIN sessions s ON s.id = l.session_id
-       WHERE s.track_id = ? AND l.valid = 1 AND l.flashback = 0`,
+       WHERE s.track_id = ? AND s.started_at < ? AND l.valid = 1 AND l.flashback = 0`,
     )
-    .get(trackId) as { s1: number | null; s2: number | null; s3: number | null }
+    .get(trackId, before) as { s1: number | null; s2: number | null; s3: number | null }
   const recent = q
     .prepare(
       `SELECT id, started_at, program, session_type, mode, best_lap_ms, median_lap_ms,
          consistency_ms, finish_pos, grid_pos, flashbacks, summary
-       FROM sessions WHERE track_id = ? ORDER BY started_at DESC LIMIT ?`,
+       FROM sessions WHERE track_id = ? AND started_at < ? ORDER BY started_at DESC LIMIT ?`,
     )
-    .all(trackId, recentLimit) as Row[]
+    .all(trackId, before, recentLimit) as Row[]
   const career = q
     .prepare(
       `SELECT COUNT(*) AS races, MIN(finish_pos) AS best, AVG(finish_pos) AS avg
-       FROM sessions WHERE track_id = ? AND program = 'career' AND finish_pos IS NOT NULL`,
+       FROM sessions WHERE track_id = ? AND started_at < ? AND program = 'career' AND finish_pos IS NOT NULL`,
     )
-    .get(trackId) as { races: number; best: number | null; avg: number | null }
+    .get(trackId, before) as { races: number; best: number | null; avg: number | null }
   const lastSetup = q
     .prepare(
-      'SELECT setup_id FROM sessions WHERE track_id = ? AND setup_id IS NOT NULL ORDER BY started_at DESC LIMIT 1',
+      'SELECT setup_id FROM sessions WHERE track_id = ? AND started_at < ? AND setup_id IS NOT NULL ORDER BY started_at DESC LIMIT 1',
     )
-    .get(trackId) as { setup_id: number } | undefined
+    .get(trackId, before) as { setup_id: number } | undefined
   const sectorsOk = sec.s1 && sec.s2 && sec.s3
   return {
     track: counts[0]!.track,

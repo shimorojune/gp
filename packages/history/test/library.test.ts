@@ -9,6 +9,7 @@ import {
   listSessions,
   sessionDetail,
   setProgram,
+  trackRecall,
 } from '../src/index.ts'
 
 const parsed = (buf: Buffer): Packet => {
@@ -135,6 +136,15 @@ describe('debrief library', () => {
       'd',
     )
     expect(sessionDetail(db, '4')!.pbMs).toBe(80000)
+  })
+
+  it('limits track recall to sessions before a given time (backfilled debriefs)', () => {
+    const all = trackRecall(db, 0)!
+    const early = trackRecall(db, 0, 5, '2026-11-02T00:00:00.000Z')!
+    expect(all.recent.length).toBeGreaterThan(1)
+    expect(early.recent).toHaveLength(1)
+    expect(early.personalBest?.lapMs).toBe(80000)
+    expect(trackRecall(db, 0, 5, '2020-01-01T00:00:00.000Z')).toBeNull()
   })
 
   it('re-files a session, and refuses career without a game season', () => {
