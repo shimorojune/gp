@@ -34,6 +34,8 @@ export interface VoiceDeps {
   log: (line: string) => void
   /** What goes over the radio, for the overlay radio card: GP's calls and answers, his questions. */
   onRadio?: (line: { who: 'gp' | 'driver'; text: string }) => void
+  /** Driver setting: talk through corners instead of holding for a straight. */
+  talkInCorners?: () => boolean
 }
 
 /** Shorter than this is a bump of the button, not speech. */
@@ -176,7 +178,12 @@ export class RadioVoice {
       // Pit lane: speed-limited, no corners worth protecting.
       const inPits = !!snap.cars.find((c) => c.isPlayer)?.pitStatus
       const straight = this.gate.update(this.d.state.playerInputs())
-      this.clearToTalk = !live || inPits || process.env.GP_TALK_IN_CORNERS === '1' || straight
+      this.clearToTalk =
+        !live ||
+        inPits ||
+        process.env.GP_TALK_IN_CORNERS === '1' ||
+        !!this.d.talkInCorners?.() ||
+        straight
     }, 50)
 
     // Stream typed and spoken answers into speech as they're written.
@@ -225,6 +232,25 @@ export class RadioVoice {
     this.d.onRadio?.({ who: 'gp', text })
     this.speak(text, { urgent, dropIfLate: !urgent })
     this.endUtterance()
+  }
+
+  private lastTtsError: string | null = null
+
+  /**
+   * Settings "Test voice": one short line through the normal path (TTS, radio chain). Resolves
+   * once the audio has been handed to the player, or with the TTS error.
+   */
+  async testLine(
+    text = 'Radio check. Loud and clear.',
+  ): Promise<{ tts: string } | { error: string }> {
+    if (this.stream) return { error: 'Busy: push-to-talk is held' }
+    this.lastTtsError = null
+    this.stopSpeaking()
+    this.newUtterance()
+    this.speak(text, { urgent: true })
+    this.endUtterance()
+    await this.speakChain
+    return this.lastTtsError ? { error: this.lastTtsError } : { tts: this.tts?.name ?? 'mac voice' }
   }
 
   /** The race order changed: anything still being said is about the old situation. */
@@ -415,7 +441,10 @@ export class RadioVoice {
             await new Promise((r) => setTimeout(r, 400 * (tries + 1)))
             continue
           }
-          if (!own.signal.aborted) this.d.log(`[tts] error: ${msg}`)
+          if (!own.signal.aborted) {
+            this.lastTtsError = msg
+            this.d.log(`[tts] error: ${msg}`)
+          }
           return null
         }
       }

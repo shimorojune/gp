@@ -9,6 +9,51 @@ export interface PersonaOptions {
   notes: Note[]
   /** Driver profile from the history database (strengths, working on, habits, progress). */
   profile?: string | null
+  /** The driver's radio settings (Settings, Radio tab). */
+  radio?: RadioPrefs
+}
+
+/** Radio settings the driver picks in the app. Stored in ~/Documents/GP/radio.json. */
+export interface RadioPrefs {
+  /** How much GP says unprompted. */
+  chattiness: 'quiet' | 'normal' | 'chatty'
+  /** Talk through corners instead of waiting for a straight (urgent calls always talk). */
+  callsInCorners: boolean
+  /** Regular specific encouragement. */
+  encouragement: boolean
+  /** Call out lost places (two or more). */
+  callLostPlaces: boolean
+}
+
+export const DEFAULT_RADIO_PREFS: RadioPrefs = {
+  chattiness: 'normal',
+  callsInCorners: false,
+  encouragement: true,
+  callLostPlaces: true,
+}
+
+/** The prompt section for the driver's radio settings; empty when they're all default. */
+export function radioPrefsText(p: RadioPrefs = DEFAULT_RADIO_PREFS): string {
+  const lines: string[] = []
+  if (p.chattiness === 'quiet')
+    lines.push(
+      '- Quiet radio: only calls he needs (safety, pit calls, penalties, a gap that changes the plan, a target when he asks). Skip routine lap and gap commentary; answer [event] turns with SILENT unless it matters.',
+    )
+  if (p.chattiness === 'chatty')
+    lines.push(
+      '- Chatty radio: he wants more running commentary. Comment on most laps and gap changes, still one short line per call.',
+    )
+  if (!p.encouragement)
+    lines.push(
+      '- Encouragement off: keep praise to genuinely notable moments (a PB, a podium, a big move). No routine "good lap" lines.',
+    )
+  if (!p.callLostPlaces)
+    lines.push(
+      "- Don't call out lost places. Just work from the new order (who is ahead and behind now).",
+    )
+  return lines.length
+    ? `\n## His radio settings (these override the defaults above)\n${lines.join('\n')}\n`
+    : ''
 }
 
 /**
@@ -20,6 +65,7 @@ export function buildSystemPrompt({
   engineerName,
   notes,
   profile,
+  radio,
 }: PersonaOptions): string {
   const memory = notes.length
     ? notes
@@ -123,6 +169,7 @@ You have ${driverName}'s whole history, session by session, through tools: get_t
 - Don't recommend a setup change on the radio unless he asks. When he does ask, answer it.
 - Lines marked [context] are background from the history database (a brief about the track when a session starts, a profile update). Take them in silently; don't announce them or reply to them on their own.
 
+${radioPrefsText(radio)}
 ## What you know about how he drives
 ${profile?.trim() || 'No profile yet: it builds up after his first few sessions.'}
 

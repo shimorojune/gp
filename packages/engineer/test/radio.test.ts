@@ -1,6 +1,7 @@
 import { TypedEmitter } from '@gp/shared'
 import type { RaceState } from '@gp/telemetry'
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_RADIO_PREFS, type RadioPrefs, radioPrefsText } from '../src/persona.ts'
 import { attachRadio, trimCall } from '../src/radio.ts'
 import type { EngineerSession, Reply } from '../src/session.ts'
 
@@ -30,7 +31,7 @@ class FakeState extends TypedEmitter<Record<string, unknown>> {
 
 const tick = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
-function setup() {
+function setup(prefs?: () => RadioPrefs) {
   const state = new FakeState()
   const sent: string[] = []
   const engineer = {
@@ -46,11 +47,28 @@ function setup() {
     settleMs: 20,
     pollMs: 5,
     onPositionChange: (a, b) => changes.push(`${a}>${b}`),
+    ...(prefs ? { prefs } : {}),
   })
   return { state, sent, stop, changes }
 }
 
 describe('attachRadio', () => {
+  it('keeps a lost place quiet when he turned those calls off', async () => {
+    const { state, sent, stop } = setup(() => ({ ...DEFAULT_RADIO_PREFS, callLostPlaces: false }))
+    await tick(20)
+    state.position = 9
+    await tick(80)
+    expect(sent[0]).toMatch(/He turned lost-place calls off/)
+    stop()
+  })
+
+  it('writes radio settings into the prompt only when they differ from the defaults', () => {
+    expect(radioPrefsText(DEFAULT_RADIO_PREFS)).toBe('')
+    const t = radioPrefsText({ ...DEFAULT_RADIO_PREFS, chattiness: 'quiet', encouragement: false })
+    expect(t).toMatch(/Quiet radio/)
+    expect(t).toMatch(/Encouragement off/)
+  })
+
   it('reports a position change once it has held, with who is around us now', async () => {
     const { state, sent, stop, changes } = setup()
     await tick(20)

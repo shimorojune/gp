@@ -33,6 +33,11 @@ export const IPC = {
   careerAssign: 'gp:career-assign',
   careerRename: 'gp:career-rename',
   sessions: 'gp:sessions',
+  careerMerge: 'gp:career-merge',
+  settingsGet: 'gp:settings-get',
+  settingsSave: 'gp:settings-save',
+  voiceTest: 'gp:voice-test',
+  dataInfo: 'gp:data-info',
   sessionDetail: 'gp:session-detail',
 } as const
 
@@ -294,6 +299,47 @@ export interface GpBridge {
    */
   ask(text: string): Promise<void>
   onChat(cb: (e: ChatEvent) => void): void
+  /** Move every season of one career into another (they become its next seasons). */
+  mergeCareers(fromId: string, intoId: string): Promise<CareersInfo | { error: string }>
+  /** Radio and Data settings, persisted in ~/Documents/GP/settings.json. */
+  settings(): Promise<AppSettings>
+  /** Partial change; radio can be partial too. Returns the saved settings. */
+  saveSettings(patch: SettingsPatch): Promise<AppSettings | { error: string }>
+  /** GP says one short line through the normal voice path. Resolves when it's been handed to the player. */
+  testVoice(): Promise<{ tts: string } | { error: string }>
+  dataInfo(): Promise<DataInfo>
+}
+
+export interface RadioPrefsInfo {
+  /** quiet: essentials only; chatty: comments on most laps and gaps. */
+  chattiness: 'quiet' | 'normal' | 'chatty'
+  /** Talk through corners instead of holding for a straight (urgent calls always talk). */
+  callsInCorners: boolean
+  /** Regular, specific encouragement. Off: only for notable moments. */
+  encouragement: boolean
+  /** Call out lost places (two or more). */
+  callLostPlaces: boolean
+}
+
+export interface AppSettings {
+  radio: RadioPrefsInfo
+  /** Raw recordings kept on this Mac once they're read into the history: 0, 2 or 5. */
+  keepRecordings: 0 | 2 | 5
+}
+
+export interface SettingsPatch {
+  radio?: Partial<RadioPrefsInfo>
+  keepRecordings?: 0 | 2 | 5
+}
+
+export interface DataInfo {
+  /** Sessions in the history (all programs, attempts included). */
+  sessions: number
+  /** When this Mac first synced with Postgres (the one-time import), null if never. */
+  firstSyncAt: string | null
+  recordingsKept: 0 | 2 | 5
+  /** GP_KEEP_RECORDINGS is set, so the keep-recordings choice has no effect: show it disabled. */
+  recordingsOverride: boolean
 }
 
 export type Program = 'career' | 'time_trial' | 'sim'

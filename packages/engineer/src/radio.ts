@@ -8,7 +8,7 @@ import {
   sessionKind,
 } from '@gp/telemetry'
 import { IncidentDetector, type IncidentMemory } from './incidents.ts'
-import { SILENT } from './persona.ts'
+import { type RadioPrefs, SILENT } from './persona.ts'
 import type { EngineerSession, Reply } from './session.ts'
 import type { PitPlan } from './strategy.ts'
 import { paceTargetsView } from './views.ts'
@@ -41,7 +41,12 @@ export interface RadioOptions {
   incidentMemory?: IncidentMemory
   /** The agreed pit plan (set_pit_plan): the radio calls him in from it. */
   pitPlan?: PitPlan
+  /** The driver's radio settings: chattiness spaces routine checks, lost places can be muted. */
+  prefs?: () => RadioPrefs
 }
+
+/** Routine checks are spaced by chattiness: normal uses minGapMs. */
+const GAP_FACTOR: Record<RadioPrefs['chattiness'], number> = { quiet: 2.5, normal: 1, chatty: 0.6 }
 
 interface Queued {
   text: string
@@ -70,7 +75,8 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
   const schedule = () => {
     if (closed || inFlight || timer || !queued.length) return
     const urgent = queued.some((q) => q.kind !== 'other')
-    const wait = urgent ? 0 : Math.max(0, lastSentAt + minGapMs - now())
+    const gap = minGapMs * GAP_FACTOR[opts.prefs?.().chattiness ?? 'normal']
+    const wait = urgent ? 0 : Math.max(0, lastSentAt + gap - now())
     timer = setTimeout(flush, wait)
   }
   const flush = () => {
@@ -174,9 +180,11 @@ export function attachRadio(state: RaceState, engineer: EngineerSession, opts: R
       .filter(Boolean)
       .join(', ')
     opts.onPositionChange?.(from, pos)
+    const quietLoss = lost && opts.prefs?.().callLostPlaces === false
     push(
-      `Position change: P${from} to P${pos} (${lost ? 'lost' : 'gained'} ${n}${between ? `, ${lost ? 'passed by' : 'passed'} ${between}` : ''}). Car ahead now ${ahead ?? 'none, leading'}, behind ${behind ?? 'none'}. Earlier plans about the old order no longer apply.`,
-      'position',
+      `Position change: P${from} to P${pos} (${lost ? 'lost' : 'gained'} ${n}${between ? `, ${lost ? 'passed by' : 'passed'} ${between}` : ''}). Car ahead now ${ahead ?? 'none, leading'}, behind ${behind ?? 'none'}. Earlier plans about the old order no longer apply.${quietLoss ? ' He turned lost-place calls off: no call about this loss.' : ''}`,
+      // A muted loss still updates the order, but waits for the next routine check.
+      quietLoss ? 'other' : 'position',
     )
   }, pollMs)
 

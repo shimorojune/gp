@@ -10,7 +10,7 @@ import { TypedEmitter } from '@gp/shared'
 import type { RaceSnapshot } from '@gp/telemetry'
 import type { LiveBest, LiveLaps } from './history.ts'
 import type { NotesStore } from './notes.ts'
-import { buildSystemPrompt } from './persona.ts'
+import { type RadioPrefs, buildSystemPrompt } from './persona.ts'
 import { AsyncQueue } from './queue.ts'
 import type { PitPlan } from './strategy.ts'
 import { createRaceTools } from './tools.ts'
@@ -28,6 +28,8 @@ export interface EngineerOptions {
   /** The agreed pit plan, shared with the radio's box call. */
   pitPlan?: PitPlan
   driverName?: string
+  /** The driver's radio settings, read whenever the system prompt is built. */
+  radioPrefs?: () => RadioPrefs
   engineerName?: string
   /** Model for things the driver asks. Default 'sonnet'. */
   model?: string
@@ -143,6 +145,7 @@ export class EngineerSession extends TypedEmitter<EngineerEvents> {
         engineerName: this.opts.engineerName ?? 'GP',
         notes: this.opts.notes.relevant(track),
         profile: this.opts.history?.profile()?.text ?? null,
+        ...(this.opts.radioPrefs ? { radio: this.opts.radioPrefs() } : {}),
       }),
       // He's an engineer, not a coding agent: no built-in tools, only race data + notes.
       tools: [],

@@ -26,7 +26,10 @@ export interface UnassignedSeason {
 
 export function listCareers(db: HistoryDb): Career[] {
   const careers = db.db
-    .prepare('SELECT id, name, created_at FROM careers ORDER BY created_at')
+    // A career merged into another keeps its row (so sync never resurrects it) but no seasons.
+    .prepare(
+      'SELECT id, name, created_at FROM careers c WHERE EXISTS (SELECT 1 FROM seasons s WHERE s.career_id = c.id) ORDER BY created_at',
+    )
     .all() as { id: string; name: string; created_at: string }[]
   const seasons = db.db.prepare(
     'SELECT season_link, number, team FROM seasons WHERE career_id = ? ORDER BY number, first_seen',
@@ -118,6 +121,40 @@ export function renameCareer(
   db.db
     .prepare('UPDATE careers SET name = ?, updated_at = ? WHERE id = ?')
     .run(name.trim(), now, id)
+}
+
+/**
+ * Merge one career into another: its seasons become the target's next seasons, in order.
+ * The emptied career stops being listed.
+ */
+export function mergeCareers(
+  db: HistoryDb,
+  fromId: string,
+  intoId: string,
+  now = new Date().toISOString(),
+): void {
+  if (fromId === intoId) throw new Error('Pick two different careers')
+  for (const id of [fromId, intoId])
+    if (!db.db.prepare('SELECT 1 FROM careers WHERE id = ?').get(id))
+      throw new Error('No such career')
+  db.db.exec('BEGIN')
+  try {
+    const { n } = db.db
+      .prepare('SELECT COALESCE(MAX(number), 0) AS n FROM seasons WHERE career_id = ?')
+      .get(intoId) as { n: number }
+    const moving = db.db
+      .prepare('SELECT season_link FROM seasons WHERE career_id = ? ORDER BY number, first_seen')
+      .all(fromId) as { season_link: number }[]
+    const move = db.db.prepare(
+      'UPDATE seasons SET career_id = ?, number = ?, updated_at = ? WHERE season_link = ?',
+    )
+    moving.forEach((s, i) => move.run(intoId, n + i + 1, now, s.season_link))
+    db.db.prepare('UPDATE careers SET updated_at = ? WHERE id IN (?, ?)').run(now, fromId, intoId)
+    db.db.exec('COMMIT')
+  } catch (e) {
+    db.db.exec('ROLLBACK')
+    throw e
+  }
 }
 
 /** The career a game season belongs to, if it has been filed. */

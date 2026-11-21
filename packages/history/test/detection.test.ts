@@ -11,6 +11,7 @@ import {
   assignSeason,
   careerOfSeason,
   listCareers,
+  mergeCareers,
   renameCareer,
   timeAway,
   timeAwayBrief,
@@ -186,6 +187,22 @@ describe('careers above seasons', () => {
     expect(() => assignSeason(db, 999, { careerId: id })).toThrow(/No season/)
     expect(() => assignSeason(db, 100, { newCareer: '  ' })).toThrow(/name/)
     expect(() => assignSeason(db, 100, { careerId: 'nope' })).toThrow(/No such career/)
+  })
+
+  it('merges one career into another, appending its seasons', () => {
+    const db = new HistoryDb(':memory:')
+    db.saveSession(careerSession('1', 100, '2026-10-01T18:00:00.000Z'), 'a')
+    db.saveSession(careerSession('2', 200, '2026-11-01T18:00:00.000Z'), 'b')
+    const a = assignSeason(db, 100, { newCareer: 'A' })
+    const b = assignSeason(db, 200, { newCareer: 'B' })
+    mergeCareers(db, b, a)
+    const list = listCareers(db)
+    expect(list.map((c) => c.name)).toEqual(['A'])
+    expect(list[0]!.seasons.map((s) => [s.seasonLink, s.number])).toEqual([
+      [100, 1],
+      [200, 2],
+    ])
+    expect(() => mergeCareers(db, a, a)).toThrow(/different/)
   })
 
   it('seeds seasons from career sessions when a v5 database is opened', () => {

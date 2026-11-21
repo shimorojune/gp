@@ -11,6 +11,7 @@ import {
   attachHistory,
   attachRadio,
   debriefSession,
+  radioPrefsText,
 } from '@gp/engineer'
 import {
   HistoryDb,
@@ -22,6 +23,7 @@ import {
   ingestRecording,
   listCareers,
   listSessions,
+  mergeCareers,
   pruneRecordings,
   recentSessionsView,
   renameCareer,
@@ -49,15 +51,18 @@ import HID from 'node-hid'
 import { BUILD } from '../build-info.ts'
 import {
   type AppInfo,
+  type AppSettings,
   type AudioMessage,
   type CareersInfo,
   type ChatEvent,
+  type DataInfo,
   IPC,
   type NotesData,
   type RecordingState,
   type SessionDetail,
   type SessionFilter,
   type SessionListItem,
+  type SettingsPatch,
   type SnapshotMessage,
   type StatusInfo,
   type UpdateState,
@@ -71,6 +76,7 @@ import {
   defaultOutputDevice,
   fetchElevenLabsCredits,
 } from './service-status.ts'
+import { SettingsStore } from './settings.ts'
 import { Updater } from './updater.ts'
 import { RadioVoice } from './voice.ts'
 
@@ -141,7 +147,12 @@ const TALK_HOTKEY = process.env.GP_TALK_HOTKEY ?? 'CommandOrControl+Shift+T'
  * Raw recordings kept on disk once they're in the history database (~400 MB per race). What GP
  * learnt lives in the database (and Postgres); the raw files are only kept for bug reports.
  */
-const KEEP_RECORDINGS = Number(process.env.GP_KEEP_RECORDINGS ?? 2)
+const settings = new SettingsStore(GP_HOME)
+/** GP_KEEP_RECORDINGS still wins (0 there = never prune); otherwise the Data tab's choice. */
+const keepRecordings = (): number =>
+  process.env.GP_KEEP_RECORDINGS !== undefined
+    ? Number(process.env.GP_KEEP_RECORDINGS)
+    : settings.get().keepRecordings
 const history = new HistoryDb(join(GP_HOME, 'gp.db'))
 /** Live copy of what the history will record, for corner comparisons during the session. */
 const liveStart = Date.now()
@@ -160,6 +171,7 @@ mkdirSync(engineerCwd, { recursive: true })
 const pitPlan = new PitPlan()
 const engineer = new EngineerSession({
   pitPlan,
+  radioPrefs: () => settings.get().radio,
   snapshot: () => state.snapshot(),
   notes,
   history,
@@ -212,6 +224,7 @@ const voice = new RadioVoice({
   toChat,
   log: (l) => console.log(l),
   onRadio: ({ who, text }) => void radioCard?.line(who, text),
+  talkInCorners: () => settings.get().radio.callsInCorners,
 })
 engineer.on('delta', ({ id, kind, text }) => {
   if (kind === 'ask') toChat({ type: 'delta', id, text })
@@ -233,6 +246,7 @@ attachRadio(state, engineer, {
   locate: historyHooks.locate,
   incidentMemory: historyHooks.incidentMemory,
   pitPlan,
+  prefs: () => settings.get().radio,
   onCall: (r, { urgent }) => {
     toChat({ type: 'radio', text: r.text, model: r.model })
     voice.radioCall(r.text, urgent)
@@ -319,8 +333,9 @@ function startSync(): void {
 
 function afterIngest(): void {
   void sync?.sync()
-  if (!Number.isFinite(KEEP_RECORDINGS) || KEEP_RECORDINGS <= 0) return
-  const gone = pruneRecordings(history, RECORDINGS_DIR, KEEP_RECORDINGS, writerPath)
+  const keep = keepRecordings()
+  if (!Number.isFinite(keep) || (keep <= 0 && process.env.GP_KEEP_RECORDINGS !== undefined)) return
+  const gone = pruneRecordings(history, RECORDINGS_DIR, Math.max(0, keep), writerPath)
   if (gone.length)
     console.log(`[history] deleted ${gone.length} old raw recording(s): ${gone.join(', ')}`)
 }
@@ -547,6 +562,34 @@ app.whenReady().then(async () => {
     }
   }
   ipcMain.handle(IPC.careers, () => careersInfo())
+  ipcMain.handle(IPC.careerMerge, (_e, fromId: string, intoId: string) =>
+    careerChange(() => mergeCareers(history, fromId, intoId)),
+  )
+  ipcMain.handle(IPC.settingsGet, (): AppSettings => settings.get())
+  ipcMain.handle(IPC.settingsSave, (_e, patch: SettingsPatch): AppSettings | { error: string } => {
+    try {
+      const before = settings.get()
+      const after = settings.set(patch)
+      if (JSON.stringify(before.radio) !== JSON.stringify(after.radio))
+        engineer.addContext(
+          `The driver changed his radio settings. From now on:${radioPrefsText(after.radio) || ' the defaults (normal chattiness, encouragement on, lost places called).'}`,
+        )
+      if (after.keepRecordings !== before.keepRecordings) afterIngest()
+      return after
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  })
+  ipcMain.handle(IPC.voiceTest, () => voice.testLine())
+  ipcMain.handle(
+    IPC.dataInfo,
+    (): DataInfo => ({
+      sessions: (history.db.prepare('SELECT COUNT(*) AS n FROM sessions').get() as { n: number }).n,
+      firstSyncAt: sync?.firstSyncAt() ?? null,
+      recordingsKept: settings.get().keepRecordings,
+      recordingsOverride: process.env.GP_KEEP_RECORDINGS !== undefined,
+    }),
+  )
   ipcMain.handle(IPC.sessions, (_e, f?: SessionFilter): SessionListItem[] =>
     listSessions(history, f ?? {}, sync?.pendingUids()),
   )

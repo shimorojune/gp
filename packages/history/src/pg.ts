@@ -408,7 +408,8 @@ export class HistorySync {
     private readonly remote: PgStore,
   ) {
     local.db.exec(
-      'CREATE TABLE IF NOT EXISTS sync_state (uid TEXT PRIMARY KEY, hash TEXT NOT NULL, synced_at TEXT NOT NULL)',
+      `CREATE TABLE IF NOT EXISTS sync_state (uid TEXT PRIMARY KEY, hash TEXT NOT NULL, synced_at TEXT NOT NULL);
+       CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`,
     )
   }
 
@@ -420,6 +421,14 @@ export class HistorySync {
       pending: pending.length,
       oldestPendingAt: pending[0]?.started_at ?? null,
     }
+  }
+
+  /** When this copy first synced with Postgres (the one-time import), or null. */
+  firstSyncAt(): string | null {
+    const r = this.local.db
+      .prepare("SELECT value FROM sync_meta WHERE key = 'first_sync_at'")
+      .get() as { value: string } | undefined
+    return r?.value ?? null
   }
 
   /** Uids of local sessions not in Postgres yet (or changed since), for "Not synced" flags. */
@@ -561,6 +570,9 @@ export class HistorySync {
       if (lp && (!rp || lp.updatedAt > rp.updatedAt)) await this.remote.setProfile(lp)
       else if (rp && (!lp || rp.updatedAt > lp.updatedAt))
         this.local.setProfile(rp.text, rp.editedBy as 'engineer' | 'driver', rp.updatedAt)
+      this.local.db
+        .prepare("INSERT OR IGNORE INTO sync_meta (key, value) VALUES ('first_sync_at', ?)")
+        .run(new Date().toISOString())
       this.status = {
         ...this.localStatus(),
         lastSyncAt: new Date().toISOString(),
