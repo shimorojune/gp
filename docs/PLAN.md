@@ -93,6 +93,7 @@ gp/
 │   ├── callouts/           rule engine, priority queue, safe-to-talk gate, line templates
 │   ├── engineer/           Agent SDK session, persona prompt, MCP tools, memory
 │   ├── voice/              STT/TTS adapters, audio playback, radio effect
+│   ├── ui/                 design system: tokens, CSS, framework-free components (docs/DESIGN.md)
 │   └── input/              PTT sources: Swift DualSense helper + keyboard hook
 ├── tools/
 │   ├── replay/             CLI: play recorded sessions into the app at 1x–20x
@@ -613,6 +614,16 @@ is mostly a practice/quali feature.
    its first launch. Then a first-run setup screen and a pre-flight check.
 
 Install by hand until then: open the dmg, drag GP to Applications, `xattr -cr /Applications/GP.app`.
+
+### Design system — **built 2026-11-21**, not yet applied to the screens
+
+`packages/ui` (`@gp/ui`): tokens (`src/tokens.ts` → `dist/gp-ui.css`), core components (buttons,
+tabs, cards, stats, lap time, delta, gap, sectors, status, fields, list/table, toast, PTT, empty
+and error states) and broadcast-style ones (driver strip, timing tower, radio card, banners) for
+the overlay. Direction: graphite + white + one red, structure borrowed from F1 TV graphics, Saira
+(OFL) as the swappable display face, Inter for body. Contrast and token-usage rules are tested.
+Rules and overlay layout: `docs/DESIGN.md`. Style guide: `pnpm --filter @gp/ui styleguide`.
+Next step (separate): move the dashboard, overlay and Notes tab onto it, then Garage/Review modes.
 
 ### Later / maybe
 
