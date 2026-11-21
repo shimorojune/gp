@@ -74,7 +74,7 @@ const spacing = sec(
 
 const cards = [
   radioCard({
-    speaker: 'GP',
+    driver: 'Piastri',
     number: 81,
     teamId: 8,
     lines: [
@@ -83,7 +83,7 @@ const cards = [
     ],
   }),
   radioCard({
-    speaker: 'GP',
+    driver: 'Leclerc',
     number: 16,
     teamId: 1,
     lines: [
@@ -92,13 +92,13 @@ const cards = [
     ],
   }),
   radioCard({
-    speaker: 'GP',
+    driver: 'Russell',
     number: 63,
     teamId: 0,
     lines: [{ who: 'gp', text: 'Hamilton 0.8 behind. Defend into Stowe.' }],
   }),
   radioCard({
-    speaker: 'GP',
+    driver: 'Verstappen',
     number: 1,
     teamId: 2,
     speaking: false,
@@ -112,12 +112,12 @@ const cards = [
 const radio = sec(
   'radio',
   'Radio card',
-  "The one broadcast component in the base set. Name in team colour over a white RADIO, big number on a stepped waveform, quotes in caps: GP's lines white on the left, yours in team colour on the right. Team colour comes from your car in the telemetry.",
+  "The one broadcast component in the base set. Your driver's name in team colour over a white RADIO, like the TV cards, big number on a stepped waveform, quotes in caps: GP's lines white on the left, yours in team colour on the right. Team colour comes from your car in the telemetry.",
   `<div class="sg-cards">${cards.join('')}</div>
   <h3 class="gp-label sg-h3">Over the game</h3>
   <div class="sg-game" id="ov-mock"><div class="sg-ov">${radioCard({
-    speaker: 'GP',
-    number: 3,
+    driver: 'Norris',
+    number: 4,
     teamId: 8,
     lines: [
       { who: 'driver', text: 'Gap behind?' },

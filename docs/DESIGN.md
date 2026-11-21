@@ -49,13 +49,14 @@ Colour rules:
 ## Radio card (`radioCard`, `animateWaveform`)
 
 ```ts
-radioCard({ speaker: 'GP', number: 81, teamId: 8, lines: [
+radioCard({ driver: 'Piastri', number: 81, teamId: 8, lines: [
   { who: 'gp', text: 'Remember to use the drink' },
   { who: 'driver', text: 'I would if it was working' },
 ] })
 ```
 
-- Top right: speaker in team colour over a white RADIO, two tight lines.
+- Top right: the driver's surname in team colour over a white RADIO (like NORRIS RADIO on TV),
+  two tight lines. In the app this is your driver's name from the game, never "GP".
 - Band: big car number in team colour, left, sitting on a stepped waveform that fades to the right.
 - Quotes in caps: GP's lines white and left, yours in team colour and right.
 - Team colour comes from your car in the telemetry (`--gp-team` on the card).

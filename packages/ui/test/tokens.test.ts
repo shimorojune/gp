@@ -72,7 +72,7 @@ describe('CSS', () => {
 describe('radio card', () => {
   it('escapes, colours by team, splits GP and driver lines', () => {
     const html = radioCard({
-      speaker: '<b>',
+      driver: '<b>',
       number: 4,
       teamId: 8,
       lines: [

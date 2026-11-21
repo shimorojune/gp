@@ -8,8 +8,11 @@ export interface RadioLine {
   text: string
 }
 export interface RadioCardOptions {
-  /** Big name in team colour, e.g. 'GP' or your surname. */
-  speaker: string
+  /**
+   * The driver whose radio this is, big in team colour, like 'NORRIS RADIO' on TV. In the app
+   * it's your driver's surname from the game (participants packet), never the engineer.
+   */
+  driver: string
   /** Second line, white. Default 'Radio'. */
   tag?: string
   /** Car number or position, big on the waveform band. */
@@ -31,7 +34,7 @@ export function radioCard(o: RadioCardOptions): string {
   return `<div class="gp-radio" style="--gp-team:${teamColor(o.teamId)}" data-state="${o.state ?? 'in'}" data-speaking="${
     o.speaking ?? true
   }" role="log" aria-live="polite">
-  <div class="gp-radio-head"><span class="gp-radio-who">${esc(o.speaker)}</span><span>${esc(o.tag ?? 'Radio')}</span></div>
+  <div class="gp-radio-head"><span class="gp-radio-who">${esc(o.driver)}</span><span>${esc(o.tag ?? 'Radio')}</span></div>
   <div class="gp-radio-band" aria-hidden="true"><div class="gp-radio-wave">${bars}</div>${
     o.number !== undefined ? `<span class="gp-radio-num">${esc(o.number)}</span>` : ''
   }</div>
