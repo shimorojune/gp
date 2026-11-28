@@ -30,6 +30,7 @@ export function cleanSettings(raw: unknown, base: AppSettings = DEFAULT_SETTINGS
       callsInCorners: bool(radio.callsInCorners, base.radio.callsInCorners),
       encouragement: bool(radio.encouragement, base.radio.encouragement),
       callLostPlaces: bool(radio.callLostPlaces, base.radio.callLostPlaces),
+      timeLossCalls: bool(radio.timeLossCalls, base.radio.timeLossCalls),
     },
     keepRecordings: keep === 0 || keep === 2 || keep === 5 ? keep : base.keepRecordings,
   }

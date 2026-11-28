@@ -5,8 +5,15 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createInterface } from 'node:readline'
 import { parseArgs } from 'node:util'
-import { EngineerSession, NotesStore, attachHistory, attachRadio } from '@gp/engineer'
-import { HistoryDb, backfill, ingestRecording } from '@gp/history'
+import { EngineerSession, LapCoach, NotesStore, attachHistory, attachRadio } from '@gp/engineer'
+import {
+  HistoryDb,
+  SessionCollector,
+  backfill,
+  ingestRecording,
+  pbTrace,
+  straightAheadS,
+} from '@gp/history'
 import { formatLapTime } from '@gp/shared'
 import {
   DEFAULT_PORT,
@@ -54,6 +61,9 @@ const USAGE = `gp <command> [options]
           List the sessions GP remembers.
   gate-test <file.gprec>
           How often GP would be allowed to talk (on a straight) over a recording.
+  coach-test <file.gprec> [--db ~/Documents/GP/gp.db]
+          The "where you're losing time" calls GP would make over a recording, and where.
+          With --db, laps before his first clean one compare against his stored best.
   ptt-test [--raw]
           Hold the push-to-talk button (L3 by default, GP_PTT_BUTTON=l3|r3|mute), talk, release: prints what was heard and how
           long transcription took. --raw prints which HID report bytes change instead.
@@ -112,6 +122,9 @@ switch (command) {
     break
   case 'gate-test':
     await gateTest()
+    break
+  case 'coach-test':
+    await coachTest()
     break
   default:
     process.stdout.write(USAGE)
@@ -541,6 +554,53 @@ async function gateTest(): Promise<void> {
     .map((w) => `${(w / 1000).toFixed(1)}s`)
   console.log(`driving ${(driving / 1000).toFixed(0)}s, clear to talk ${pct}%`)
   console.log(`${windows.length} windows, ${long} of 2s+, longest ${top.join(' ')}`)
+}
+
+async function coachTest(): Promise<void> {
+  const path = positionals[0]
+  if (!path) throw new Error('usage: coach-test <file.gprec> [--db gp.db]')
+  let clock = 0
+  const state = new RaceState({ now: () => clock })
+  const live = new SessionCollector(0)
+  const db = values.db ? new HistoryDb(resolve(cwd, values.db)) : null
+  const coach = new LapCoach({
+    state,
+    lastLap: () => live.lastLap(),
+    sessionBest: () => live.liveBest(),
+    storedBest: (trackId) => {
+      const car = live.liveCar()
+      return db && car ? pbTrace(db, trackId, car) : null
+    },
+    canTalk: () => true,
+    say: (text) => {
+      const me = state.snapshot().cars.find((c) => c.isPlayer)
+      const ref = live.liveBest()
+      const left = ref && me ? straightAheadS(ref.trace, me.lapDistanceM).toFixed(1) : '?'
+      console.log(
+        `  SAY lap ${me?.currentLap} at ${Math.round(me?.lapDistanceM ?? 0)} m (${left}s of straight left): ${text}`,
+      )
+    },
+    log: (l) => console.log(l),
+    now: () => clock,
+  })
+  state.on('sessionStarted', () => coach.reset())
+  state.on('lapCompleted', (l) => {
+    if (!l.isPlayer) return
+    console.log(`lap ${l.lapNumber} ${formatLapTime(l.lapTimeMs)}${l.valid ? '' : ' (invalid)'}`)
+    coach.lapDone(l.lapNumber)
+  })
+  let lastTick = 0
+  for await (const pkt of readRecording(resolve(cwd, path))) {
+    clock = pkt.t
+    const res = parsePacket(pkt.buf)
+    if (!res.ok) continue
+    live.feed(res.packet, pkt.t)
+    state.ingest(res.packet)
+    if (clock - lastTick >= 100) {
+      lastTick = clock
+      coach.tick()
+    }
+  }
 }
 
 function historyDb(): HistoryDb {

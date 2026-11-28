@@ -19,6 +19,7 @@
     "chat": "pnpm --filter @gp/cli chat",
     "ptt-test": "pnpm --filter @gp/cli ptt-test",
     "gate-test": "pnpm --filter @gp/cli gate-test",
+    "coach-test": "pnpm --filter @gp/cli coach-test",
     "history": "pnpm --filter @gp/cli history",
     "ingest": "pnpm --filter @gp/cli ingest",
     "package": "pnpm --filter @gp/desktop package"

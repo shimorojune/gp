@@ -68,6 +68,21 @@ export interface LapTrace {
   /** 0-100, max in the bin */
   brake: number[]
   gear: number[]
+  /**
+   * Lap time (ms) when the car first reached each bin; -1 = no sample. Traces stored before
+   * this existed don't have it: times are then estimated from the speed (see traceTimes).
+   */
+  timeMs?: number[]
+}
+
+/** The trace of the lap he just finished, valid or not, for the live time-loss calls. */
+export interface CompletedLapTrace {
+  lap: number
+  lapMs: number
+  valid: boolean
+  /** A flashback was used on this lap. */
+  flashback: boolean
+  trace: LapTrace
 }
 
 export interface SessionResult {
@@ -155,18 +170,37 @@ interface TraceAccum {
   throttleSum: number[]
   brakeMax: number[]
   gear: number[]
+  timeMs: number[]
   dirty: boolean
 }
 
 function newTrace(lap: number): TraceAccum {
-  return { lap, speedSum: [], count: [], throttleSum: [], brakeMax: [], gear: [], dirty: false }
+  return {
+    lap,
+    speedSum: [],
+    count: [],
+    throttleSum: [],
+    brakeMax: [],
+    gear: [],
+    timeMs: [],
+    dirty: false,
+  }
 }
 
 function finishTrace(t: TraceAccum): LapTrace {
   const n = t.count.length
-  const out: LapTrace = { lap: t.lap, binM: BIN_M, speed: [], throttle: [], brake: [], gear: [] }
+  const out: LapTrace = {
+    lap: t.lap,
+    binM: BIN_M,
+    speed: [],
+    throttle: [],
+    brake: [],
+    gear: [],
+    timeMs: [],
+  }
   for (let i = 0; i < n; i++) {
     const c = t.count[i] ?? 0
+    out.timeMs!.push(c ? (t.timeMs[i] ?? -1) : -1)
     out.speed.push(c ? Math.round((t.speedSum[i] ?? 0) / c) : -1)
     out.throttle.push(c ? Math.round(((t.throttleSum[i] ?? 0) / c) * 100) : -1)
     out.brake.push(c ? Math.round((t.brakeMax[i] ?? 0) * 100) : -1)
@@ -196,6 +230,9 @@ class SessionAccum {
   private curLap = 0
   private lapDistance = -1
   private trace: TraceAccum | null = null
+  /** currentLapTimeInMS from the latest lap data. */
+  private lapTimeNow = 0
+  lastLap: CompletedLapTrace | null = null
   bestTrace: { ms: number; trace: LapTrace } | null = null
   /** Best clean lap trace per setup, for "is the new setup better" in this session. */
   readonly bestBySetup = new Map<string, { ms: number; trace: LapTrace }>()
@@ -223,6 +260,14 @@ class SessionAccum {
     this.state.on('lapCompleted', (l) => {
       if (l.isPlayer) this.onLap(l)
     })
+  }
+
+  /** "Red Bull Racing", or "Red Bull Racing (F2)" outside F1: the car he's driving. */
+  car(): string | null {
+    const s = this.session
+    if (this.teamId === null || !s) return null
+    const team = TEAMS[this.teamId] ?? `team ${this.teamId}`
+    return `${team}${s.formula === 0 ? '' : ` (${FORMULAS[s.formula] ?? `formula #${s.formula}`})`}`
   }
 
   feed(p: Packet, at: number): void {
@@ -259,6 +304,7 @@ class SessionAccum {
           this.trace = newTrace(l.currentLapNum)
         }
         this.lapDistance = l.lapDistance
+        this.lapTimeNow = l.currentLapTimeInMS
         this.onRoad = l.pitStatus === 0 && l.driverStatus !== 0
         break
       }
@@ -273,6 +319,10 @@ class SessionAccum {
         tr.throttleSum[bin] = (tr.throttleSum[bin] ?? 0) + t.throttle
         tr.brakeMax[bin] = Math.max(tr.brakeMax[bin] ?? 0, t.brake)
         tr.gear[bin] = t.gear
+        // The time he first got here. Right after the line the distance can still read the end
+        // of the old lap: a near-zero time out there is that, not a real sample.
+        if (tr.timeMs[bin] === undefined && !(this.lapTimeNow < 5000 && bin > 50))
+          tr.timeMs[bin] = this.lapTimeNow
         break
       }
       case PacketId.CarDamage: {
@@ -398,6 +448,15 @@ class SessionAccum {
     this.laps.set(l.lapNumber, rec)
     this.lapDoneAt.set(l.lapNumber, this.sessionTime)
     const tr = this.trace
+    if (tr && tr.lap === l.lapNumber && !tr.dirty) {
+      this.lastLap = {
+        lap: l.lapNumber,
+        lapMs: l.lapTimeMs,
+        valid: l.valid,
+        flashback: this.flashbackLaps.has(l.lapNumber),
+        trace: finishTrace(tr),
+      }
+    } else this.lastLap = null
     if (tr && tr.lap === l.lapNumber && !tr.dirty && l.valid) {
       const done = finishTrace(tr)
       if (!this.bestTrace || l.lapTimeMs < this.bestTrace.ms)
@@ -509,10 +568,7 @@ class SessionAccum {
       sessionLink: s.sessionLinkIdentifier,
       team: this.teamId === null ? null : (TEAMS[this.teamId] ?? `team ${this.teamId}`),
       formula: FORMULAS[s.formula] ?? `formula #${s.formula}`,
-      car:
-        this.teamId === null
-          ? null
-          : `${TEAMS[this.teamId] ?? `team ${this.teamId}`}${s.formula === 0 ? '' : ` (${FORMULAS[s.formula] ?? `formula #${s.formula}`})`}`,
+      car: this.car(),
       ended: this.ended,
       fuelLoad: this.fuelLoad,
       laps,
@@ -582,6 +638,18 @@ export class SessionCollector {
       ...c.liveLaps(),
       bestBySetup: c.bestBySetup,
     }
+  }
+
+  /** The lap he just completed (null after a flashback mixed two attempts into it). */
+  lastLap(): (CompletedLapTrace & { trackId: number | null; car: string | null }) | null {
+    const c = this.cur
+    if (!c?.lastLap) return null
+    return { ...c.lastLap, trackId: c.state.snapshot().session?.trackId ?? null, car: c.car() }
+  }
+
+  /** The car in the live session, as the history stores it. */
+  liveCar(): string | null {
+    return this.cur?.car() ?? null
   }
 
   liveBest(): { trackId: number | null; lapMs: number; trace: LapTrace } | null {

@@ -317,6 +317,8 @@ export interface RadioPrefsInfo {
   encouragement: boolean
   /** Call out lost places (two or more). */
   callLostPlaces: boolean
+  /** On a straight, where the last lap lost time and the fix. */
+  timeLossCalls: boolean
 }
 
 export interface AppSettings {
