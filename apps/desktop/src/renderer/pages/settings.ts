@@ -262,6 +262,7 @@ function radio(body: HTMLElement): () => void {
 <div class="gp-setting"><div class="gp-setting-text">Calls in corners<span>Off: only urgent calls while you're turning</span></div>${switchEl('callsInCorners', r.callsInCorners, 'Calls in corners')}</div>
 <div class="gp-setting"><div class="gp-setting-text">Encouragement<span>Specific and earned. Never generic.</span></div>${switchEl('encouragement', r.encouragement, 'Encouragement')}</div>
 <div class="gp-setting"><div class="gp-setting-text">Call lost places<span>When you drop two or more</span></div>${switchEl('callLostPlaces', r.callLostPlaces, 'Call lost places')}</div>
+<div class="gp-setting"><div class="gp-setting-text">Where you're losing time<span>One corner and the fix, only on a straight. Races and practice.</span></div>${switchEl('timeLossCalls', r.timeLossCalls, 'Where you are losing time')}</div>
 <div class="row" style="margin-top: 8px"><span class="faint" style="font-size: 12px" data-saved>Changes reach GP straight away, even mid-session.</span></div>
 </section>`
   }

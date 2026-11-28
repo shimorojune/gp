@@ -154,15 +154,83 @@ function throttlePoint(t: LapTrace, apex: number, to: number): number | null {
   return null
 }
 
-function segmentMs(t: LapTrace, from: number, to: number): number {
+/** Estimated ms to cover one bin, from its speed. */
+function binMs(t: LapTrace, i: number): number {
+  const kph = t.speed[i] ?? -1
+  // Gaps in the trace (dropped packets): borrow the neighbour's speed.
+  const v = kph > 0 ? kph : (t.speed[i - 1] ?? t.speed[i + 1] ?? 100)
+  return (t.binM / (Math.max(v, 1) / 3.6)) * 1000
+}
+
+function segmentMs(t: LapTrace, from: number, to: number, times?: number[]): number {
+  if (times) return timeAtBin(t, times, to) - timeAtBin(t, times, from)
   let ms = 0
-  for (let i = from; i < to; i++) {
-    const kph = t.speed[i] ?? -1
-    // Gaps in the trace (dropped packets): borrow the neighbour's speed.
-    const v = kph > 0 ? kph : (t.speed[i - 1] ?? t.speed[i + 1] ?? 100)
-    ms += (t.binM / (Math.max(v, 1) / 3.6)) * 1000
-  }
+  for (let i = from; i < to; i++) ms += binMs(t, i)
   return ms
+}
+
+/** Lap time on arriving at bin `i` (i may be one past the last bin: the finish line). */
+function timeAtBin(t: LapTrace, times: number[], i: number): number {
+  if (i < times.length) return times[i]!
+  const last = times.length - 1
+  return last < 0 ? 0 : times[last]! + binMs(t, last)
+}
+
+/**
+ * Lap time (ms) on arriving at each bin. Uses the recorded times where the trace has them and
+ * they move forward; gaps, and old traces without times, are filled in from the speed.
+ */
+export function traceTimes(t: LapTrace): number[] {
+  const out: number[] = []
+  for (let i = 0; i < t.speed.length; i++) {
+    const rec = t.timeMs?.[i] ?? -1
+    const prev = out[i - 1]
+    if (rec >= 0 && (prev === undefined || rec >= prev)) out.push(rec)
+    else out.push(prev === undefined ? 0 : prev + binMs(t, i - 1))
+  }
+  return out
+}
+
+/**
+ * Live delta to a reference lap: + = slower than the reference at this point of the lap.
+ * Null when the reference doesn't cover this distance. Cheap enough to run on every packet,
+ * if `times` (traceTimes of the reference) is computed once.
+ */
+export function deltaAt(
+  ref: LapTrace,
+  distM: number,
+  lapTimeMs: number,
+  times: number[] = traceTimes(ref),
+): number | null {
+  if (distM < 0 || !times.length) return null
+  const x = distM / ref.binM
+  const i = Math.floor(x)
+  if (i >= times.length) return null
+  const a = times[i]!
+  const b = timeAtBin(ref, times, i + 1)
+  return Math.round(lapTimeMs - (a + (b - a) * (x - i)))
+}
+
+/** Flat out in this bin of the trace: full throttle, off the brakes. */
+const flatOut = (t: LapTrace, i: number) => (t.throttle[i] ?? -1) >= 90 && (t.brake[i] ?? 0) < 5
+
+/**
+ * Seconds of flat-out running left from `distM`, going by how the reference lap was driven:
+ * 0 when that spot was a corner or a braking zone. Runs on across the start line.
+ */
+export function straightAheadS(ref: LapTrace, distM: number): number {
+  const n = ref.speed.length
+  if (!n || distM < 0) return 0
+  let i = Math.floor(distM / ref.binM)
+  if (i >= n) return 0
+  let ms = 0
+  for (let k = 0; k < n && flatOut(ref, i); k++) {
+    // Only the part of the current bin still ahead of him.
+    const share = k === 0 ? 1 - (distM / ref.binM - i) : 1
+    ms += binMs(ref, i) * share
+    i = (i + 1) % n
+  }
+  return ms / 1000
 }
 
 /**
@@ -172,6 +240,10 @@ function segmentMs(t: LapTrace, from: number, to: number): number {
 export function compareTraces(ref: LapTrace, lap: LapTrace): CornerDelta[] {
   const corners = findCorners(ref)
   const n = Math.min(ref.speed.length, lap.speed.length)
+  // Recorded lap times beat speed estimates, but only when both laps have them.
+  const timed = !!ref.timeMs?.length && !!lap.timeMs?.length
+  const refTimes = timed ? traceTimes(ref).slice(0, n) : undefined
+  const lapTimes = timed ? traceTimes(lap).slice(0, n) : undefined
   const out: CornerDelta[] = []
   let segStart = 0
   corners.forEach((apex, idx) => {
@@ -194,7 +266,9 @@ export function compareTraces(ref: LapTrace, lap: LapTrace): CornerDelta[] {
       refMinKph: window(ref),
       brakeLaterM: rb !== null && lb !== null ? (lb - rb) * ref.binM : null,
       throttleLaterM: rt !== null && lt !== null ? (lt - rt) * ref.binM : null,
-      timeMs: Math.round(segmentMs(lap, segStart, exitTo) - segmentMs(ref, segStart, exitTo)),
+      timeMs: Math.round(
+        segmentMs(lap, segStart, exitTo, lapTimes) - segmentMs(ref, segStart, exitTo, refTimes),
+      ),
     })
     segStart = exitTo
   })
@@ -202,21 +276,29 @@ export function compareTraces(ref: LapTrace, lap: LapTrace): CornerDelta[] {
   // straight after it).
   const last = out.at(-1)
   if (last && segStart < n)
-    last.timeMs += Math.round(segmentMs(lap, segStart, n) - segmentMs(ref, segStart, n))
+    last.timeMs += Math.round(
+      segmentMs(lap, segStart, n, lapTimes) - segmentMs(ref, segStart, n, refTimes),
+    )
   return out
 }
 
-/** The stored trace of his fastest clean lap at a track. */
+/**
+ * The stored trace of his fastest clean lap at a track; with `car`, only laps in that car
+ * (cars differ too much to coach one against the other).
+ */
 export function pbTrace(
   db: HistoryDb,
   trackId: number,
+  car?: string,
 ): { lapMs: number; date: string; trace: LapTrace } | null {
   const r = db.db
     .prepare(
       `SELECT t.lap_ms, t.data, s.started_at FROM traces t JOIN sessions s ON s.id = t.session_id
-       WHERE s.track_id = ? ORDER BY t.lap_ms LIMIT 1`,
+       WHERE s.track_id = ?${car ? ' AND COALESCE(s.car, s.team) = ?' : ''} ORDER BY t.lap_ms LIMIT 1`,
     )
-    .get(trackId) as { lap_ms: number; data: string; started_at: string } | undefined
+    .get(...(car ? [trackId, car] : [trackId])) as
+    | { lap_ms: number; data: string; started_at: string }
+    | undefined
   return r
     ? { lapMs: r.lap_ms, date: r.started_at.slice(0, 10), trace: JSON.parse(r.data) as LapTrace }
     : null

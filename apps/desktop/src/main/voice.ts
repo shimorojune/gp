@@ -93,6 +93,8 @@ export class RadioVoice {
   private stopped = false
   /** Utterance number of an answer to the driver that is still queued or playing. */
   private answering: number | null = null
+  /** Utterance still being spoken (any kind); null when the radio is quiet. */
+  private talking: number | null = null
   private controller: 'usb' | 'bluetooth' | null = null
   /** The keys the engines were built with, to rebuild only when they change. */
   private keys = ''
@@ -229,6 +231,11 @@ export class RadioVoice {
       this.spokenCount.delete(r.id)
       this.endUtterance()
     })
+  }
+
+  /** Nothing on the radio: not speaking, not answering, push-to-talk not held. */
+  idle(): boolean {
+    return !this.stream && this.answering === null && this.talking === null
   }
 
   /** Speak a complete radio call (automatic checks). */
@@ -386,6 +393,7 @@ export class RadioVoice {
     this.speakChain = this.speakChain.then(() => {
       this.d.toAudio({ type: 'end', utt })
       if (this.answering === utt) this.answering = null
+      if (this.talking === utt) this.talking = null
     })
   }
 
@@ -404,6 +412,7 @@ export class RadioVoice {
 
   private speak(text: string, opts: SpeakOptions = {}): void {
     const utt = this.utt
+    this.talking = utt
     const signal = this.speakAbort.signal
     // Hold each sentence until a straight (mid-reply too: he pauses through the corner).
     const gate = async (): Promise<boolean> => {
@@ -537,6 +546,7 @@ export class RadioVoice {
     this.speakAbort = new AbortController()
     this.speakChain = Promise.resolve()
     this.answering = null
+    this.talking = null
     this.splitters.clear()
     this.mutedThrough = this.lastAskId
     this.d.toAudio({ type: 'stop' })

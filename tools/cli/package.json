@@ -16,6 +16,7 @@
     "chat": "tsx src/main.ts chat",
     "ptt-test": "tsx src/main.ts ptt-test",
     "gate-test": "tsx src/main.ts gate-test",
+    "coach-test": "tsx src/main.ts coach-test",
     "history": "tsx src/main.ts history",
     "ingest": "tsx src/main.ts ingest"
   },

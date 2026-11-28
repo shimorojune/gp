@@ -9,6 +9,7 @@ import {
   NotesStore,
   PitPlan,
   attachHistory,
+  attachLapCoach,
   attachRadio,
   debriefSession,
   radioPrefsText,
@@ -24,6 +25,7 @@ import {
   listCareers,
   listSessions,
   mergeCareers,
+  pbTrace,
   pruneRecordings,
   recentSessionsView,
   renameCareer,
@@ -265,6 +267,32 @@ attachRadio(state, engineer, {
     console.log(`[radio] position P${from} -> P${to}`)
     voice.positionChanged()
   },
+})
+
+// Where he's losing time: one corner and the fix, only on a long enough straight.
+attachLapCoach({
+  state,
+  lastLap: () => live.lastLap(),
+  sessionBest: () => live.liveBest(),
+  storedBest: (trackId) => {
+    const car = live.liveCar()
+    if (!car) return null
+    try {
+      return pbTrace(history, trackId, car)
+    } catch {
+      return null
+    }
+  },
+  locate: historyHooks.locate,
+  canTalk: () => voice.idle(),
+  say: (text) => {
+    toChat({ type: 'radio', text, model: 'coach' })
+    voice.radioCall(text)
+    console.log(`[radio] ${text}`)
+  },
+  addContext: (t) => engineer.addContext(t),
+  prefs: () => settings.get().radio,
+  log: (l) => console.log(l),
 })
 
 listener.on('packet', (p) => {
